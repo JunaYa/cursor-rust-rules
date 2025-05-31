@@ -1,0 +1,525 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# ⚡ RUST CONCURRENCY BEST PRACTICES
+
+> **TL;DR:** Modern async/await patterns and thread-safe data structures for high-performance Rust applications.
+
+## 🎯 ASYNC RUNTIME SELECTION
+
+### Tokio as the Standard
+- **Always use Tokio** for async runtime
+- **Use tokio::sync primitives** instead of std::sync for async code
+- **Leverage async/await patterns** throughout the application
+- **Avoid blocking operations** in async contexts
+
+```toml
+# Cargo.toml - Tokio configuration
+[dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "time", "fs"] }
+```
+
+## 🔒 SYNCHRONIZATION PRIMITIVES
+
+### Tokio Sync Over Std Sync
+```rust
+// ✅ Preferred: Use tokio synchronization primitives
+use tokio::sync::{RwLock, Mutex, broadcast, mpsc, oneshot};
+use std::sync::Arc;
+
+// ✅ Good: Async-friendly RwLock
+pub struct WorkflowCache {
+    data: Arc<RwLock<HashMap<String, WorkflowDefinition>>>,
+}
+
+impl WorkflowCache {
+    pub fn new() -> Self {
+        Self {
+            data: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    pub async fn get(&self, id: &str) -> Option<WorkflowDefinition> {
+        let data = self.data.read().await;
+        data.get(id).cloned()
+    }
+
+    pub async fn insert(&self, id: String, workflow: WorkflowDefinition) {
+        let mut data = self.data.write().await;
+        data.insert(id, workflow);
+    }
+
+    pub async fn remove(&self, id: &str) -> Option<WorkflowDefinition> {
+        let mut data = self.data.write().await;
+        data.remove(id)
+    }
+}
+
+// ❌ Avoid: std::sync in async contexts
+// use std::sync::{RwLock, Mutex};  // Blocks async runtime
+// use parking_lot::{RwLock, Mutex}; // Also blocking
+```
+
+### DashMap for Concurrent Collections
+```rust
+use dashmap::DashMap;
+use std::sync::Arc;
+
+// ✅ Preferred: DashMap for concurrent hash maps
+pub struct NodeRegistry {
+    nodes: Arc<DashMap<String, Box<dyn NodeType>>>,
+    categories: Arc<DashMap<String, Vec<String>>>,
+}
+
+impl NodeRegistry {
+    pub fn new() -> Self {
+        Self {
+            nodes: Arc::new(DashMap::new()),
+            categories: Arc::new(DashMap::new()),
+        }
+    }
+
+    pub fn register_node(&self, id: String, node: Box<dyn NodeType>) {
+        let category = node.category().to_string();
+
+        // Insert the node
+        self.nodes.insert(id.clone(), node);
+
+        // Update category index
+        self.categories
+            .entry(category)
+            .or_insert_with(Vec::new)
+            .push(id);
+    }
+
+    pub fn get_node(&self, id: &str) -> Option<dashmap::mapref::one::Ref<String, Box<dyn NodeType>>> {
+        self.nodes.get(id)
+    }
+
+    pub fn list_by_category(&self, category: &str) -> Vec<String> {
+        self.categories
+            .get(category)
+            .map(|entry| entry.clone())
+            .unwrap_or_default()
+    }
+
+    pub fn list_all_nodes(&self) -> Vec<String> {
+        self.nodes.iter().map(|entry| entry.key().clone()).collect()
+    }
+}
+
+// ❌ Avoid: Mutex<HashMap> for concurrent access
+// pub struct BadNodeRegistry {
+//     nodes: Arc<Mutex<HashMap<String, Box<dyn NodeType>>>>
+// }
+```
+
+## 📡 CHANNEL PATTERNS
+
+### Multi-Producer Single-Consumer (MPSC)
+```rust
+use tokio::sync::mpsc;
+use tracing::{info, error};
+
+pub struct EventProcessor {
+    sender: mpsc::UnboundedSender<WorkflowEvent>,
+}
+
+impl EventProcessor {
+    pub fn new() -> (Self, EventProcessorHandle) {
+        let (tx, rx) = mpsc::unbounded_channel();
+
+        let handle = EventProcessorHandle::new(rx);
+        let processor = Self { sender: tx };
+
+        (processor, handle)
+    }
+
+    pub fn send_event(&self, event: WorkflowEvent) -> Result<(), mpsc::error::SendError<WorkflowEvent>> {
+        self.sender.send(event)
+    }
+}
+
+pub struct EventProcessorHandle {
+    receiver: mpsc::UnboundedReceiver<WorkflowEvent>,
+}
+
+impl EventProcessorHandle {
+    fn new(receiver: mpsc::UnboundedReceiver<WorkflowEvent>) -> Self {
+        Self { receiver }
+    }
+
+    pub async fn run(mut self) {
+        while let Some(event) = self.receiver.recv().await {
+            if let Err(e) = self.process_event(event).await {
+                error!("Failed to process event: {}", e);
+            }
+        }
+        info!("Event processor stopped");
+    }
+
+    async fn process_event(&self, event: WorkflowEvent) -> Result<(), ProcessingError> {
+        match event {
+            WorkflowEvent::Started { workflow_id, .. } => {
+                info!("Workflow {} started", workflow_id);
+                // Process workflow start
+            }
+            WorkflowEvent::Completed { workflow_id, .. } => {
+                info!("Workflow {} completed", workflow_id);
+                // Process workflow completion
+            }
+            WorkflowEvent::Failed { workflow_id, error, .. } => {
+                error!("Workflow {} failed: {}", workflow_id, error);
+                // Process workflow failure
+            }
+        }
+        Ok(())
+    }
+}
+```
+
+### Broadcast for Multiple Subscribers
+```rust
+use tokio::sync::broadcast;
+
+pub struct EventBus {
+    sender: broadcast::Sender<SystemEvent>,
+}
+
+impl EventBus {
+    pub fn new(capacity: usize) -> Self {
+        let (sender, _) = broadcast::channel(capacity);
+        Self { sender }
+    }
+
+    pub fn publish(&self, event: SystemEvent) -> Result<usize, broadcast::error::SendError<SystemEvent>> {
+        self.sender.send(event)
+    }
+
+    pub fn subscribe(&self) -> broadcast::Receiver<SystemEvent> {
+        self.sender.subscribe()
+    }
+}
+
+// Usage example
+pub async fn start_event_monitoring(event_bus: Arc<EventBus>) {
+    let mut receiver = event_bus.subscribe();
+
+    tokio::spawn(async move {
+        while let Ok(event) = receiver.recv().await {
+            match event {
+                SystemEvent::NodeExecutionStarted { node_id, .. } => {
+                    info!("Node {} started execution", node_id);
+                }
+                SystemEvent::NodeExecutionCompleted { node_id, .. } => {
+                    info!("Node {} completed execution", node_id);
+                }
+                SystemEvent::SystemShutdown => {
+                    info!("System shutdown requested");
+                    break;
+                }
+            }
+        }
+    });
+}
+```
+
+### Oneshot for Single Response
+```rust
+use tokio::sync::oneshot;
+
+pub struct AsyncValidator {
+    // Internal state
+}
+
+impl AsyncValidator {
+    pub async fn validate_workflow(&self, workflow: WorkflowDefinition) -> Result<ValidationResult, ValidationError> {
+        let (tx, rx) = oneshot::channel();
+
+        // Spawn validation task
+        let workflow_clone = workflow.clone();
+        tokio::spawn(async move {
+            let result = perform_validation(workflow_clone).await;
+            let _ = tx.send(result);
+        });
+
+        // Wait for validation result
+        rx.await
+            .map_err(|_| ValidationError::Internal("Validation task cancelled".to_string()))?
+    }
+}
+
+async fn perform_validation(workflow: WorkflowDefinition) -> Result<ValidationResult, ValidationError> {
+    // Expensive validation logic
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+    if workflow.nodes.is_empty() {
+        return Err(ValidationError::EmptyWorkflow);
+    }
+
+    Ok(ValidationResult::Valid)
+}
+```
+
+## 🏃 TASK MANAGEMENT
+
+### Structured Concurrency with JoinSet
+```rust
+use tokio::task::JoinSet;
+use std::collections::HashMap;
+
+pub struct WorkflowExecutor {
+    // Internal state
+}
+
+impl WorkflowExecutor {
+    pub async fn execute_workflow_parallel(&self, workflow: &WorkflowDefinition) -> Result<ExecutionResult, ExecutionError> {
+        let mut join_set = JoinSet::new();
+        let mut results = HashMap::new();
+
+        // Execute nodes in parallel where possible
+        for node in &workflow.nodes {
+            if self.can_execute_parallel(node, &results) {
+                let node_clone = node.clone();
+                let executor = self.clone();
+
+                join_set.spawn(async move {
+                    let result = executor.execute_node(&node_clone).await;
+                    (node_clone.id.clone(), result)
+                });
+            }
+        }
+
+        // Collect results
+        while let Some(result) = join_set.join_next().await {
+            match result {
+                Ok((node_id, execution_result)) => {
+                    results.insert(node_id, execution_result?);
+                }
+                Err(join_error) => {
+                    return Err(ExecutionError::TaskFailed(join_error.to_string()));
+                }
+            }
+        }
+
+        Ok(ExecutionResult { node_results: results })
+    }
+
+    fn can_execute_parallel(&self, node: &NodeDefinition, completed_results: &HashMap<String, NodeResult>) -> bool {
+        // Check if all dependencies are satisfied
+        node.dependencies.iter().all(|dep| completed_results.contains_key(dep))
+    }
+}
+```
+
+### Graceful Shutdown Pattern
+```rust
+use tokio::sync::broadcast;
+use tokio_util::sync::CancellationToken;
+
+pub struct Application {
+    shutdown_token: CancellationToken,
+    tasks: Vec<tokio::task::JoinHandle<()>>,
+}
+
+impl Application {
+    pub fn new() -> Self {
+        Self {
+            shutdown_token: CancellationToken::new(),
+            tasks: Vec::new(),
+        }
+    }
+
+    pub async fn start(&mut self) -> Result<(), ApplicationError> {
+        // Start background services
+        self.start_workflow_executor().await?;
+        self.start_event_processor().await?;
+        self.start_health_monitor().await?;
+
+        // Wait for shutdown signal
+        self.wait_for_shutdown().await;
+
+        // Graceful shutdown
+        self.shutdown_gracefully().await
+    }
+
+    async fn start_workflow_executor(&mut self) -> Result<(), ApplicationError> {
+        let token = self.shutdown_token.clone();
+
+        let handle = tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    _ = token.cancelled() => {
+                        info!("Workflow executor shutdown requested");
+                        break;
+                    }
+                    _ = tokio::time::sleep(tokio::time::Duration::from_secs(1)) => {
+                        // Process workflows
+                    }
+                }
+            }
+        });
+
+        self.tasks.push(handle);
+        Ok(())
+    }
+
+    async fn wait_for_shutdown(&self) {
+        // Listen for shutdown signals
+        let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).unwrap();
+        let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt()).unwrap();
+
+        tokio::select! {
+            _ = sigterm.recv() => info!("Received SIGTERM"),
+            _ = sigint.recv() => info!("Received SIGINT"),
+        }
+
+        self.shutdown_token.cancel();
+    }
+
+    async fn shutdown_gracefully(&mut self) -> Result<(), ApplicationError> {
+        info!("Starting graceful shutdown");
+
+        // Wait for all tasks to complete with timeout
+        let shutdown_timeout = tokio::time::Duration::from_secs(30);
+
+        tokio::time::timeout(shutdown_timeout, async {
+            for handle in self.tasks.drain(..) {
+                if let Err(e) = handle.await {
+                    error!("Task failed during shutdown: {}", e);
+                }
+            }
+        }).await.map_err(|_| ApplicationError::ShutdownTimeout)?;
+
+        info!("Graceful shutdown completed");
+        Ok(())
+    }
+}
+```
+
+## 🧪 TESTING CONCURRENT CODE
+
+### Testing Async Functions
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::time::{timeout, Duration};
+
+    #[tokio::test]
+    async fn test_workflow_cache_concurrent_access() {
+        let cache = WorkflowCache::new();
+        let workflow = WorkflowDefinition::default();
+
+        // Test concurrent insertions
+        let mut handles = Vec::new();
+
+        for i in 0..10 {
+            let cache_clone = cache.clone();
+            let workflow_clone = workflow.clone();
+
+            handles.push(tokio::spawn(async move {
+                cache_clone.insert(format!("workflow_{}", i), workflow_clone).await;
+            }));
+        }
+
+        // Wait for all insertions
+        for handle in handles {
+            handle.await.unwrap();
+        }
+
+        // Verify all workflows were inserted
+        for i in 0..10 {
+            let result = cache.get(&format!("workflow_{}", i)).await;
+            assert!(result.is_some());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_event_processor_with_timeout() {
+        let (processor, handle) = EventProcessor::new();
+
+        // Start processor in background
+        let processor_task = tokio::spawn(handle.run());
+
+        // Send test events
+        let event = WorkflowEvent::Started {
+            workflow_id: "test-workflow".to_string(),
+            timestamp: Utc::now(),
+        };
+
+        processor.send_event(event).unwrap();
+
+        // Test with timeout to prevent hanging
+        let result = timeout(Duration::from_secs(5), async {
+            // Give processor time to handle event
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }).await;
+
+        assert!(result.is_ok());
+
+        // Cleanup
+        drop(processor);
+        let _ = timeout(Duration::from_secs(1), processor_task).await;
+    }
+}
+```
+
+## 🚨 CONCURRENCY ANTI-PATTERNS
+
+### What to Avoid
+```rust
+// ❌ Don't use std::sync in async contexts
+// use std::sync::{Mutex, RwLock};
+//
+// struct BadAsyncCache {
+//     data: std::sync::RwLock<HashMap<String, Value>>,  // Blocks async runtime
+// }
+
+// ❌ Don't use parking_lot in async code
+// use parking_lot::{RwLock, Mutex};
+//
+// struct AlsoBadAsyncCache {
+//     data: parking_lot::RwLock<HashMap<String, Value>>,  // Also blocks
+// }
+
+// ❌ Don't use Mutex<HashMap> for concurrent collections
+// struct BadRegistry {
+//     data: Arc<Mutex<HashMap<String, Value>>>,  // Use DashMap instead
+// }
+
+// ❌ Don't forget to handle cancellation in long-running tasks
+// tokio::spawn(async {
+//     loop {
+//         // This loop never checks for cancellation
+//         process_data().await;
+//     }
+// });
+
+// ❌ Don't block the async runtime
+// async fn bad_function() {
+//     std::thread::sleep(Duration::from_secs(1));  // Blocks entire runtime
+// }
+```
+
+## ✅ CONCURRENCY CHECKLIST
+
+```markdown
+### Concurrency Implementation Verification
+- [ ] Uses tokio::sync primitives (not std::sync or parking_lot)
+- [ ] DashMap used for concurrent collections instead of Mutex<HashMap>
+- [ ] All long-running tasks support cancellation
+- [ ] No blocking operations in async contexts
+- [ ] Proper error handling in concurrent code
+- [ ] Graceful shutdown implemented
+- [ ] Tests include concurrent access scenarios
+- [ ] Structured concurrency with JoinSet for parallel tasks
+- [ ] Appropriate channel types used (mpsc, broadcast, oneshot)
+- [ ] All async functions properly awaited
+- [ ] No unwrap/expect in concurrent code
+- [ ] Timeouts used for potentially hanging operations
+```
+
+This concurrency standard ensures safe, efficient, and maintainable concurrent Rust applications using modern async/await patterns.

@@ -3,3 +3,264 @@ description:
 globs:
 alwaysApply: false
 ---
+# 🦀 RUST CORE CODE QUALITY STANDARDS
+
+> **TL;DR:** Essential code quality rules for all Rust projects, focusing on maintainable, production-ready code that follows modern Rust 2024 idioms.
+
+## 🎯 FUNDAMENTAL PRINCIPLES
+
+### Code Organization
+- **Functionality-based files**: Use meaningful file names like `node.rs`, `workflow.rs`, `execution.rs` instead of generic `models.rs`, `traits.rs`, `types.rs`
+- **Meaningful naming**: Avoid names like `WorkflowValidatorImpl` - use descriptive, specific names
+- **File size limits**: Maximum 500 lines per file (excluding tests)
+- **Function size**: Maximum 150 lines per function
+- **Single Responsibility**: Each module should have one clear purpose
+
+### Rust Edition and Safety
+- **Always use Rust 2024 edition**
+- **Never use `unsafe` code** - find safe alternatives
+- **Production-ready code**: All code must be deployable and maintainable
+- **No `unwrap()` or `expect()`** in production code - use proper error handling
+
+## 📦 DEPENDENCY MANAGEMENT
+
+### Workspace Dependencies Priority
+```toml
+# Always prefer workspace dependencies first
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+
+# Only add new dependencies if not available in workspace
+# Request permission before modifying Cargo.toml
+```
+
+### Version Strategy
+- **Always use latest versions** when adding new dependencies
+- **Request permission** before modifying `Cargo.toml`
+- **Check workspace first** - never duplicate dependencies unnecessarily
+
+## 🏗️ CODE STRUCTURE PATTERNS
+
+### Data Structure Organization
+```rust
+// ✅ Good: Functionality-based organization
+// src/workflow.rs - All workflow-related types and logic
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]  // Always use camelCase for JSON serialization
+pub struct WorkflowDefinition {
+    pub workflow_id: String,
+    pub display_name: String,
+    pub created_at: DateTime<Utc>,
+}
+
+// ✅ Good: Meaningful trait names
+pub trait WorkflowValidator {
+    fn validate(&self, workflow: &WorkflowDefinition) -> Result<(), ValidationError>;
+}
+
+// ❌ Bad: Generic file organization
+// src/models.rs, src/traits.rs, src/types.rs
+// ❌ Bad: Poor naming
+// struct WorkflowValidatorImpl
+```
+
+### Serde Configuration
+```rust
+// ✅ Always use camelCase for JSON serialization
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApiResponse {
+    pub workflow_id: String,
+    pub created_at: DateTime<Utc>,
+    pub is_active: bool,
+}
+
+// This serializes to:
+// {"workflowId": "...", "createdAt": "...", "isActive": true}
+```
+
+## 🔧 BUILD AND QUALITY CHECKS
+
+### Mandatory Verification Steps
+After completing any code changes, **always run in order**:
+
+```bash
+# 1. Build check
+cargo build
+
+# 2. Test execution
+cargo test
+
+# 3. Linting
+cargo clippy
+
+# All must pass before considering code complete
+```
+
+### Clippy Configuration
+```toml
+# Cargo.toml
+[lints.clippy]
+all = "warn"
+pedantic = "warn"
+nursery = "warn"
+unwrap_used = "deny"
+expect_used = "deny"
+```
+
+## 🗂️ FILE NAMING CONVENTIONS
+
+### Module Organization Patterns
+```rust
+// ✅ Good: Feature-based modules
+src/
+├── workflow/
+│   ├── mod.rs
+│   ├── validator.rs     // WorkflowValidator trait and implementations
+│   ├── executor.rs      // WorkflowExecutor logic
+│   └── definition.rs    // WorkflowDefinition types
+├── node/
+│   ├── mod.rs
+│   ├── registry.rs      // NodeRegistry (not NodeTypeRegistry)
+│   └── executor.rs      // Node execution logic
+└── storage/
+    ├── mod.rs
+    ├── entities.rs      // Database entities
+    └── repositories.rs  // Data access patterns
+```
+
+### Naming Best Practices
+```rust
+// ✅ Good naming examples
+pub struct WorkflowValidator;          // Clear, specific
+pub struct NodeExecutor;               // Action-oriented
+pub struct DatabaseConnection;         // Descriptive
+
+// ❌ Bad naming examples
+pub struct WorkflowValidatorImpl;      // Unnecessary "Impl" suffix
+pub struct Helper;                     // Too generic
+pub struct Manager;                    // Vague responsibility
+```
+
+## 🧪 TESTING STANDARDS
+
+### Unit Test Placement
+```rust
+// ✅ Always place unit tests in the same file
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_workflow_validation() {
+        let validator = WorkflowValidator::new();
+        let workflow = WorkflowDefinition::default();
+        assert!(validator.validate(&workflow).is_ok());
+    }
+}
+
+// ❌ Don't create separate test files for unit tests
+// tests/workflow_test.rs (this is for integration tests only)
+```
+
+### Test Naming
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_valid_workflow_passes_validation() {
+        // Test name clearly describes the scenario
+    }
+
+    #[test]
+    fn test_empty_workflow_id_returns_error() {
+        // Specific about what's being tested
+    }
+}
+```
+
+## 📝 DOCUMENTATION STANDARDS
+
+### Code Documentation
+```rust
+/// Validates workflow definitions according to business rules.
+///
+/// # Examples
+///
+/// ```rust
+/// let validator = WorkflowValidator::new();
+/// let workflow = WorkflowDefinition::builder()
+///     .workflow_id("test-workflow")
+///     .build();
+///
+/// assert!(validator.validate(&workflow).is_ok());
+/// ```
+///
+/// # Errors
+///
+/// Returns `ValidationError` if:
+/// - Workflow ID is empty or invalid
+/// - Required fields are missing
+/// - Business rules are violated
+pub struct WorkflowValidator {
+    rules: Vec<ValidationRule>,
+}
+```
+
+## 🚨 ANTI-PATTERNS TO AVOID
+
+### Code Organization Anti-Patterns
+```rust
+// ❌ Don't use generic file names
+// src/models.rs - mixing unrelated types
+// src/utils.rs - catch-all for random functions
+// src/helpers.rs - unclear responsibility
+
+// ❌ Don't use implementation suffixes
+pub struct WorkflowValidatorImpl;
+pub struct DatabaseManagerImpl;
+
+// ❌ Don't mix concerns in single files
+// src/app.rs containing database, validation, and HTTP logic
+
+// ❌ Don't use overly long files
+// Any file > 500 lines (excluding tests) needs refactoring
+```
+
+### Dependency Anti-Patterns
+```rust
+// ❌ Don't duplicate workspace dependencies
+[dependencies]
+tokio = "1.0"  # Already in workspace
+
+// ❌ Don't modify Cargo.toml without permission
+# Always ask before adding new dependencies
+
+// ❌ Don't use outdated versions
+serde = "0.9"  # Use latest stable
+```
+
+## ✅ QUALITY CHECKLIST
+
+```markdown
+### Code Quality Verification
+- [ ] Uses Rust 2024 edition
+- [ ] No `unsafe` code blocks
+- [ ] No `unwrap()` or `expect()` in production code
+- [ ] All data structures use `#[serde(rename_all = "camelCase")]`
+- [ ] Files organized by functionality, not type
+- [ ] Meaningful names (no "Impl" suffixes)
+- [ ] Functions ≤ 150 lines
+- [ ] Files ≤ 500 lines (excluding tests)
+- [ ] Unit tests in same file as implementation
+- [ ] `cargo build` passes
+- [ ] `cargo test` passes
+- [ ] `cargo clippy` passes with no warnings
+- [ ] Public APIs documented with examples
+- [ ] Workspace dependencies used when available
+```
+
+This code quality standard ensures consistent, maintainable, and production-ready Rust code across all projects.

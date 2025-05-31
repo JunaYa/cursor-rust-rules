@@ -3,3 +3,604 @@ description:
 globs:
 alwaysApply: false
 ---
+# 🌐 AXUM WEB FRAMEWORK BEST PRACTICES
+
+> **TL;DR:** Modern async web development with Axum, focusing on structured APIs, proper error handling, and OpenAPI documentation.
+
+## 🎯 AXUM PROJECT STRUCTURE
+
+### Router Organization
+```rust
+use axum::{
+    extract::{Path, Query, State},
+    http::StatusCode,
+    response::Json,
+    routing::{get, post, put, delete},
+    Router,
+};
+use utoipa::{OpenApi, ToSchema};
+use utoipa_axum::{router::OpenApiRouter, routes};
+
+// ✅ Good: Modular router structure
+pub fn create_app(state: AppState) -> Router {
+    let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
+        .routes(routes!(health_check))
+        .nest("/api/v1/workflows", workflows::router())
+        .nest("/api/v1/nodes", nodes::router())
+        .nest("/api/v1/executions", executions::router())
+        .with_state(state)
+        .split_for_parts();
+
+    router.merge(utoipa_swagger_ui::SwaggerUi::new("/swagger-ui")
+        .url("/apidoc/openapi.json", api))
+}
+
+#[derive(OpenApi)]
+#[openapi(
+    tags(
+        (name = "workflows", description = "Workflow management API"),
+        (name = "nodes", description = "Node management API"),
+        (name = "executions", description = "Execution management API")
+    )
+)]
+struct ApiDoc;
+```
+
+### Application State Pattern
+```rust
+use sqlx::PgPool;
+use std::sync::Arc;
+
+#[derive(Clone)]
+pub struct AppState {
+    pub db: PgPool,
+    pub config: Arc<AppConfig>,
+    pub node_registry: Arc<NodeRegistry>,
+    pub event_bus: Arc<EventBus>,
+}
+
+impl AppState {
+    pub async fn new(config: AppConfig) -> Result<Self, AppError> {
+        let db = create_connection_pool(&config.database.url).await?;
+
+        // Run migrations
+        sqlx::migrate!("./migrations").run(&db).await?;
+
+        let node_registry = Arc::new(NodeRegistry::new());
+        let event_bus = Arc::new(EventBus::new(1000));
+
+        Ok(Self {
+            db,
+            config: Arc::new(config),
+            node_registry,
+            event_bus,
+        })
+    }
+}
+```
+
+## 🔧 REQUEST/RESPONSE PATTERNS
+
+### Path Parameters with Validation
+```rust
+use axum::extract::Path;
+use serde::Deserialize;
+use uuid::Uuid;
+use utoipa::ToSchema;
+
+// ✅ Good: Axum 0.8 path parameter syntax
+#[utoipa::path(
+    get,
+    path = "/api/v1/workflows/{workflow_id}",
+    params(
+        ("workflow_id" = Uuid, Path, description = "Workflow unique identifier")
+    ),
+    responses(
+        (status = 200, description = "Workflow found", body = WorkflowResponse),
+        (status = 404, description = "Workflow not found", body = ErrorResponse)
+    ),
+    tag = "workflows"
+)]
+pub async fn get_workflow(
+    State(state): State<AppState>,
+    Path(workflow_id): Path<Uuid>,  // Note: {workflow_id} in route, not :workflow_id
+) -> Result<Json<WorkflowResponse>, AppError> {
+    let workflow = state
+        .workflow_service
+        .get_by_id(workflow_id)
+        .await?
+        .ok_or(AppError::NotFound("Workflow not found".to_string()))?;
+
+    Ok(Json(WorkflowResponse::from(workflow)))
+}
+
+// ❌ Wrong: Axum 0.7 syntax (outdated)
+// Path("/api/v1/workflows/:workflow_id")  // Don't use :workflow_id
+```
+
+### Query Parameters with Defaults
+```rust
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ListQuery {
+    #[serde(default = "default_limit")]
+    pub limit: i64,
+    #[serde(default)]
+    pub offset: i64,
+    #[serde(default)]
+    pub sort_by: Option<String>,
+    #[serde(default)]
+    pub sort_order: Option<SortOrder>,
+}
+
+fn default_limit() -> i64 {
+    20
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum SortOrder {
+    Asc,
+    Desc,
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/workflows",
+    params(ListQuery),
+    responses(
+        (status = 200, description = "List of workflows", body = WorkflowListResponse)
+    ),
+    tag = "workflows"
+)]
+pub async fn list_workflows(
+    State(state): State<AppState>,
+    Query(query): Query<ListQuery>,
+) -> Result<Json<WorkflowListResponse>, AppError> {
+    let workflows = state
+        .workflow_service
+        .list(query.limit, query.offset, query.sort_by, query.sort_order)
+        .await?;
+
+    Ok(Json(WorkflowListResponse { workflows }))
+}
+```
+
+### JSON Request/Response with Validation
+```rust
+use axum::Json;
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
+use validator::Validate;
+
+#[derive(Debug, Deserialize, Validate, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateWorkflowRequest {
+    #[validate(length(min = 1, max = 100))]
+    pub name: String,
+
+    #[validate(length(max = 500))]
+    pub description: Option<String>,
+
+    #[serde(default)]
+    pub workflow_data: serde_json::Value,
+
+    #[serde(default)]
+    pub is_active: bool,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkflowResponse {
+    pub id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub workflow_data: serde_json::Value,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/workflows",
+    request_body = CreateWorkflowRequest,
+    responses(
+        (status = 201, description = "Workflow created", body = WorkflowResponse),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+        (status = 422, description = "Validation error", body = ValidationErrorResponse)
+    ),
+    tag = "workflows"
+)]
+pub async fn create_workflow(
+    State(state): State<AppState>,
+    Json(request): Json<CreateWorkflowRequest>,
+) -> Result<(StatusCode, Json<WorkflowResponse>), AppError> {
+    // Validate request
+    request.validate()
+        .map_err(|e| AppError::Validation(e.to_string()))?;
+
+    let workflow = state
+        .workflow_service
+        .create(request)
+        .await?;
+
+    Ok((StatusCode::CREATED, Json(WorkflowResponse::from(workflow))))
+}
+```
+
+## 🚨 ERROR HANDLING
+
+### Centralized Error Types
+```rust
+use axum::{
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    Json,
+};
+use serde::Serialize;
+use thiserror::Error;
+use utoipa::ToSchema;
+
+#[derive(Error, Debug)]
+pub enum AppError {
+    #[error("Database error: {0}")]
+    Database(#[from] sqlx::Error),
+
+    #[error("Validation error: {0}")]
+    Validation(String),
+
+    #[error("Not found: {0}")]
+    NotFound(String),
+
+    #[error("Unauthorized")]
+    Unauthorized,
+
+    #[error("Forbidden")]
+    Forbidden,
+
+    #[error("Internal server error: {0}")]
+    Internal(String),
+
+    #[error("Bad request: {0}")]
+    BadRequest(String),
+}
+
+#[derive(Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ErrorResponse {
+    pub error: String,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<serde_json::Value>,
+}
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        let (status, error_message) = match &self {
+            AppError::Database(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error"),
+            AppError::Validation(_) => (StatusCode::UNPROCESSABLE_ENTITY, "Validation error"),
+            AppError::NotFound(_) => (StatusCode::NOT_FOUND, "Not found"),
+            AppError::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized"),
+            AppError::Forbidden => (StatusCode::FORBIDDEN, "Forbidden"),
+            AppError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"),
+            AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, "Bad request"),
+        };
+
+        let error_response = ErrorResponse {
+            error: error_message.to_string(),
+            message: self.to_string(),
+            details: None,
+        };
+
+        (status, Json(error_response)).into_response()
+    }
+}
+```
+
+### Request Validation Middleware
+```rust
+use axum::{
+    extract::Request,
+    middleware::Next,
+    response::Response,
+};
+use tower::ServiceBuilder;
+
+pub fn create_middleware_stack() -> ServiceBuilder<
+    tower::ServiceBuilder<
+        tower::ServiceBuilder<
+            tower::ServiceBuilder<tower::identity::Identity>
+        >
+    >
+> {
+    ServiceBuilder::new()
+        .layer(tower_http::cors::CorsLayer::permissive())
+        .layer(tower_http::trace::TraceLayer::new_for_http())
+        .layer(axum::middleware::from_fn(request_id_middleware))
+        .layer(tower_http::timeout::TimeoutLayer::new(
+            std::time::Duration::from_secs(30)
+        ))
+}
+
+pub async fn request_id_middleware(
+    mut request: Request,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    let request_id = uuid::Uuid::new_v4().to_string();
+    request.headers_mut().insert(
+        "X-Request-ID",
+        request_id.parse().unwrap(),
+    );
+
+    Ok(next.run(request).await)
+}
+```
+
+## 📚 OPENAPI DOCUMENTATION
+
+### Complete API Documentation
+```rust
+use utoipa::{OpenApi, ToSchema};
+use utoipa_axum::router::OpenApiRouter;
+
+#[derive(OpenApi)]
+#[openapi(
+    info(
+        title = "Workflow Engine API",
+        version = "1.0.0",
+        description = "A comprehensive workflow management system",
+        contact(
+            name = "API Support",
+            email = "support@example.com"
+        )
+    ),
+    paths(
+        // Workflow endpoints
+        workflows::get_workflow,
+        workflows::list_workflows,
+        workflows::create_workflow,
+        workflows::update_workflow,
+        workflows::delete_workflow,
+        workflows::execute_workflow,
+
+        // Node endpoints
+        nodes::list_node_types,
+        nodes::get_node_schema,
+
+        // Execution endpoints
+        executions::get_execution,
+        executions::list_executions,
+    ),
+    components(
+        schemas(
+            WorkflowResponse,
+            CreateWorkflowRequest,
+            UpdateWorkflowRequest,
+            WorkflowListResponse,
+            NodeTypeInfo,
+            ExecutionResponse,
+            ErrorResponse,
+        )
+    ),
+    tags(
+        (name = "workflows", description = "Workflow management operations"),
+        (name = "nodes", description = "Node type information and schemas"),
+        (name = "executions", description = "Workflow execution tracking")
+    )
+)]
+pub struct ApiDoc;
+
+// ✅ Good: Detailed endpoint documentation
+#[utoipa::path(
+    put,
+    path = "/api/v1/workflows/{workflow_id}",
+    params(
+        ("workflow_id" = Uuid, Path, description = "Workflow unique identifier")
+    ),
+    request_body(
+        content = UpdateWorkflowRequest,
+        description = "Workflow update data",
+        content_type = "application/json"
+    ),
+    responses(
+        (status = 200, description = "Workflow updated successfully", body = WorkflowResponse),
+        (status = 400, description = "Invalid request data", body = ErrorResponse),
+        (status = 404, description = "Workflow not found", body = ErrorResponse),
+        (status = 422, description = "Validation failed", body = ErrorResponse)
+    ),
+    tag = "workflows",
+    summary = "Update workflow",
+    description = "Updates an existing workflow with new data. Only provided fields will be updated."
+)]
+pub async fn update_workflow(
+    State(state): State<AppState>,
+    Path(workflow_id): Path<Uuid>,
+    Json(request): Json<UpdateWorkflowRequest>,
+) -> Result<Json<WorkflowResponse>, AppError> {
+    // Implementation
+    todo!()
+}
+```
+
+## 🧪 TESTING AXUM HANDLERS
+
+### Integration Testing
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+    };
+    use serde_json::json;
+    use tower::ServiceExt;
+
+    async fn setup_test_app() -> Router {
+        let state = AppState::new_test().await;
+        create_app(state)
+    }
+
+    #[tokio::test]
+    async fn test_create_workflow_success() {
+        let app = setup_test_app().await;
+
+        let request_body = json!({
+            "name": "Test Workflow",
+            "description": "A test workflow",
+            "workflowData": {},
+            "isActive": true
+        });
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/api/v1/workflows")
+            .header("Content-Type", "application/json")
+            .body(Body::from(request_body.to_string()))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let workflow: WorkflowResponse = serde_json::from_slice(&body).unwrap();
+        assert_eq!(workflow.name, "Test Workflow");
+    }
+
+    #[tokio::test]
+    async fn test_get_workflow_not_found() {
+        let app = setup_test_app().await;
+        let non_existent_id = Uuid::new_v4();
+
+        let request = Request::builder()
+            .method("GET")
+            .uri(&format!("/api/v1/workflows/{}", non_existent_id))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_validation_error() {
+        let app = setup_test_app().await;
+
+        let invalid_request = json!({
+            "name": "",  // Empty name should fail validation
+            "description": "Valid description"
+        });
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/api/v1/workflows")
+            .header("Content-Type", "application/json")
+            .body(Body::from(invalid_request.to_string()))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+}
+```
+
+## 🔧 SERVER CONFIGURATION
+
+### Production Server Setup
+```rust
+use axum::serve;
+use std::net::SocketAddr;
+use tokio::net::TcpListener;
+use tower_http::trace::TraceLayer;
+use tracing::{info, error};
+
+pub async fn start_server(config: AppConfig) -> Result<(), Box<dyn std::error::Error>> {
+    let state = AppState::new(config.clone()).await?;
+    let app = create_app(state)
+        .layer(create_middleware_stack());
+
+    let addr = SocketAddr::from(([0, 0, 0, 0], config.server.port));
+    let listener = TcpListener::bind(addr).await?;
+
+    info!("Server starting on {}", addr);
+
+    serve(listener, app)
+        .await
+        .map_err(|e| {
+            error!("Server error: {}", e);
+            e.into()
+        })
+}
+
+// Graceful shutdown handling
+pub async fn start_server_with_shutdown(
+    config: AppConfig,
+    shutdown_signal: impl std::future::Future<Output = ()> + Send + 'static,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let state = AppState::new(config.clone()).await?;
+    let app = create_app(state)
+        .layer(create_middleware_stack());
+
+    let addr = SocketAddr::from(([0, 0, 0, 0], config.server.port));
+    let listener = TcpListener::bind(addr).await?;
+
+    info!("Server starting on {}", addr);
+
+    serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal)
+        .await
+        .map_err(|e| {
+            error!("Server error: {}", e);
+            e.into()
+        })
+}
+```
+
+## 🚨 AXUM ANTI-PATTERNS
+
+### What to Avoid
+```rust
+// ❌ Don't use old Axum 0.7 path syntax
+// #[utoipa::path(get, path = "/workflows/:id")]  // Use {id} instead
+
+// ❌ Don't forget Content-Type header for JSON endpoints
+// Missing: .header("Content-Type", "application/json")
+
+// ❌ Don't ignore validation
+// pub async fn create_user(Json(request): Json<CreateUserRequest>) {
+//     // Missing: request.validate()?
+// }
+
+// ❌ Don't use std::sync in Axum handlers
+// pub async fn bad_handler(State(state): State<Arc<Mutex<Data>>>) {
+//     let data = state.lock().unwrap();  // Blocks async runtime
+// }
+
+// ❌ Don't return bare strings for JSON APIs
+// pub async fn bad_endpoint() -> String {
+//     "success".to_string()  // Should return Json<Response>
+// }
+```
+
+## ✅ AXUM CHECKLIST
+
+```markdown
+### Axum Implementation Verification
+- [ ] Uses Axum 0.8 path syntax with {param} not :param
+- [ ] All JSON structs use #[serde(rename_all = "camelCase")]
+- [ ] Comprehensive OpenAPI documentation with utoipa
+- [ ] Proper error handling with IntoResponse trait
+- [ ] Request validation with validator crate
+- [ ] Structured application state with Clone trait
+- [ ] Integration tests for all endpoints
+- [ ] Middleware stack includes CORS, tracing, timeouts
+- [ ] Graceful shutdown implementation
+- [ ] No blocking operations in async handlers
+- [ ] Content-Type headers properly set
+- [ ] HTTP status codes correctly used
+```
+
+This Axum standard ensures robust, well-documented, and maintainable web APIs following modern Rust async patterns.

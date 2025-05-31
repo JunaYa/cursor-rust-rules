@@ -1,0 +1,583 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# 🛠️ RUST TOOLS & CONFIGURATION BEST PRACTICES
+
+> **TL;DR:** Modern tooling choices and configuration patterns for Rust applications, focusing on maintainable and production-ready setups.
+
+## 📊 LOGGING AND OBSERVABILITY
+
+### Use Tracing Instead of env_logger
+```rust
+// ✅ Preferred: Use tracing ecosystem
+use tracing::{info, warn, error, debug, instrument};
+use tracing_subscriber::{
+    layer::SubscriberExt,
+    util::SubscriberInitExt,
+    EnvFilter,
+    Registry,
+};
+
+pub fn init_tracing() {
+    Registry::default()
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_target(false)
+                .compact()
+        )
+        .with(EnvFilter::from_default_env())
+        .init();
+}
+
+// Structured logging with context
+#[instrument(skip(sensitive_data))]
+pub async fn process_workflow(
+    workflow_id: &str,
+    user_id: &str,
+    sensitive_data: &[u8]
+) -> Result<(), ProcessingError> {
+    info!("Starting workflow processing");
+
+    // Processing logic
+    debug!("Processing step 1 completed");
+
+    match perform_operation().await {
+        Ok(result) => {
+            info!(result_count = result.len(), "Processing completed successfully");
+            Ok(())
+        }
+        Err(e) => {
+            error!(error = %e, "Processing failed");
+            Err(e)
+        }
+    }
+}
+
+// ❌ Avoid: env_logger (deprecated pattern)
+// use env_logger;
+// env_logger::init();
+```
+
+### Tracing Configuration
+```rust
+use tracing_appender::rolling::{RollingFileAppender, Rotation};
+use tracing_subscriber::{
+    fmt::writer::MakeWriterExt,
+    layer::SubscriberExt,
+    util::SubscriberInitExt,
+};
+
+pub fn init_production_tracing(log_dir: &str) -> Result<(), Box<dyn std::error::Error>> {
+    // File appender with rotation
+    let file_appender = RollingFileAppender::new(
+        Rotation::daily(),
+        log_dir,
+        "application.log"
+    );
+
+    // Console output for development
+    let console_layer = tracing_subscriber::fmt::layer()
+        .with_target(false)
+        .compact();
+
+    // File output for production
+    let file_layer = tracing_subscriber::fmt::layer()
+        .with_writer(file_appender)
+        .with_ansi(false)
+        .json();
+
+    tracing_subscriber::registry()
+        .with(console_layer)
+        .with(file_layer)
+        .with(EnvFilter::from_default_env())
+        .init();
+
+    Ok(())
+}
+```
+
+## 📄 CONFIGURATION MANAGEMENT
+
+### Use YAML Instead of TOML
+```yaml
+# config.yaml - Preferred configuration format
+server:
+  host: "0.0.0.0"
+  port: 8080
+  workers: 4
+
+database:
+  url: "postgresql://user:pass@localhost/db"
+  maxConnections: 20
+  minConnections: 5
+  timeoutSecs: 30
+
+logging:
+  level: "info"
+  format: "json"
+  directory: "./logs"
+
+features:
+  enableMetrics: true
+  enableTracing: true
+  debugMode: false
+
+nodes:
+  ai:
+    defaultModel: "gpt-4o"
+    maxTokens: 4096
+    temperature: 0.7
+
+  crawler:
+    userAgent: "CellaBot/1.0"
+    timeout: 30
+    maxRetries: 3
+```
+
+### Configuration Loading Pattern
+```rust
+use serde::{Deserialize, Serialize};
+use std::fs;
+use anyhow::{Context, Result};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppConfig {
+    pub server: ServerConfig,
+    pub database: DatabaseConfig,
+    pub logging: LoggingConfig,
+    pub features: FeatureConfig,
+    pub nodes: NodeConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerConfig {
+    pub host: String,
+    pub port: u16,
+    pub workers: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DatabaseConfig {
+    pub url: String,
+    pub max_connections: u32,
+    pub min_connections: u32,
+    pub timeout_secs: u64,
+}
+
+impl AppConfig {
+    pub fn load() -> Result<Self> {
+        // Try multiple config sources in order
+        Self::from_file("config.yaml")
+            .or_else(|_| Self::from_file("config.yml"))
+            .or_else(|_| Self::from_env())
+            .context("Failed to load configuration from any source")
+    }
+
+    pub fn from_file(path: &str) -> Result<Self> {
+        let content = fs::read_to_string(path)
+            .with_context(|| format!("Failed to read config file: {}", path))?;
+
+        serde_yaml::from_str(&content)
+            .with_context(|| format!("Failed to parse config file: {}", path))
+    }
+
+    pub fn from_env() -> Result<Self> {
+        // Load from environment variables with fallbacks
+        Ok(Self {
+            server: ServerConfig {
+                host: std::env::var("SERVER_HOST")
+                    .unwrap_or_else(|_| "0.0.0.0".to_string()),
+                port: std::env::var("SERVER_PORT")
+                    .unwrap_or_else(|_| "8080".to_string())
+                    .parse()
+                    .context("Invalid SERVER_PORT")?,
+                workers: std::env::var("SERVER_WORKERS")
+                    .unwrap_or_else(|_| "4".to_string())
+                    .parse()
+                    .context("Invalid SERVER_WORKERS")?,
+            },
+            database: DatabaseConfig {
+                url: std::env::var("DATABASE_URL")
+                    .context("DATABASE_URL environment variable required")?,
+                max_connections: std::env::var("DB_MAX_CONNECTIONS")
+                    .unwrap_or_else(|_| "20".to_string())
+                    .parse()
+                    .context("Invalid DB_MAX_CONNECTIONS")?,
+                min_connections: std::env::var("DB_MIN_CONNECTIONS")
+                    .unwrap_or_else(|_| "5".to_string())
+                    .parse()
+                    .context("Invalid DB_MIN_CONNECTIONS")?,
+                timeout_secs: std::env::var("DB_TIMEOUT_SECS")
+                    .unwrap_or_else(|_| "30".to_string())
+                    .parse()
+                    .context("Invalid DB_TIMEOUT_SECS")?,
+            },
+            // ... other config sections
+        })
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        if self.server.port == 0 {
+            anyhow::bail!("Server port cannot be 0");
+        }
+
+        if self.database.url.is_empty() {
+            anyhow::bail!("Database URL cannot be empty");
+        }
+
+        if self.server.workers == 0 {
+            anyhow::bail!("Server workers must be greater than 0");
+        }
+
+        Ok(())
+    }
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            server: ServerConfig {
+                host: "127.0.0.1".to_string(),
+                port: 8080,
+                workers: 4,
+            },
+            database: DatabaseConfig {
+                url: "sqlite::memory:".to_string(),
+                max_connections: 20,
+                min_connections: 5,
+                timeout_secs: 30,
+            },
+            // ... other default values
+        }
+    }
+}
+```
+
+## 🔧 TEMPLATING WITH MINIJINJA
+
+### Use MiniJinja Instead of Handlebars
+```rust
+// ✅ Preferred: Use minijinja for templating
+use minijinja::{Environment, context};
+use serde_json::Value;
+use anyhow::Result;
+
+pub struct TemplateEngine {
+    env: Environment<'static>,
+}
+
+impl TemplateEngine {
+    pub fn new() -> Self {
+        let mut env = Environment::new();
+
+        // Add custom filters
+        env.add_filter("format_date", format_date_filter);
+        env.add_filter("truncate", truncate_filter);
+        env.add_filter("json_path", json_path_filter);
+
+        // Add custom functions
+        env.add_function("now", now_function);
+        env.add_function("uuid", uuid_function);
+
+        Self { env }
+    }
+
+    pub fn render_template(&self, template: &str, data: &Value) -> Result<String> {
+        let tmpl = self.env.template_from_str(template)?;
+        let result = tmpl.render(context! { data => data })?;
+        Ok(result)
+    }
+
+    pub fn add_template(&mut self, name: &str, source: &str) -> Result<()> {
+        self.env.add_template(name, source)?;
+        Ok(())
+    }
+
+    pub fn render_named(&self, name: &str, data: &Value) -> Result<String> {
+        let tmpl = self.env.get_template(name)?;
+        let result = tmpl.render(context! { data => data })?;
+        Ok(result)
+    }
+}
+
+// Custom filters
+fn format_date_filter(value: Value, format: Option<String>) -> Result<String, minijinja::Error> {
+    // Implementation for date formatting
+    todo!()
+}
+
+fn truncate_filter(value: Value, length: Option<usize>) -> Result<String, minijinja::Error> {
+    let text = value.as_str().unwrap_or("");
+    let len = length.unwrap_or(100);
+
+    if text.len() <= len {
+        Ok(text.to_string())
+    } else {
+        Ok(format!("{}...", &text[..len]))
+    }
+}
+
+fn json_path_filter(value: Value, path: String) -> Result<Value, minijinja::Error> {
+    // Use jsonpath-rust for extraction
+    use jsonpath_rust::JsonPathFinder;
+
+    let finder = JsonPathFinder::from_str(&value.to_string(), &path)
+        .map_err(|e| minijinja::Error::new(minijinja::ErrorKind::InvalidOperation, e.to_string()))?;
+
+    let result = finder.find();
+    Ok(serde_json::to_value(result).unwrap_or(Value::Null))
+}
+
+// Custom functions
+fn now_function(_args: Vec<Value>) -> Result<Value, minijinja::Error> {
+    use chrono::Utc;
+    Ok(Value::String(Utc::now().to_rfc3339()))
+}
+
+fn uuid_function(_args: Vec<Value>) -> Result<Value, minijinja::Error> {
+    use uuid::Uuid;
+    Ok(Value::String(Uuid::new_v4().to_string()))
+}
+
+// ❌ Avoid: handlebars (less modern)
+// use handlebars::Handlebars;
+```
+
+### Template Usage Examples
+```rust
+use serde_json::json;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_template_rendering() {
+        let engine = TemplateEngine::new();
+
+        let template = r#"
+        Hello {{ data.name }}!
+
+        Your workflow "{{ data.workflow_name }}" has {{ data.node_count }} nodes.
+
+        Results:
+        {% for result in data.results %}
+        - {{ result.node_name }}: {{ result.status }}
+        {% endfor %}
+
+        Generated at: {{ now() }}
+        Request ID: {{ uuid() }}
+        "#;
+
+        let data = json!({
+            "name": "John Doe",
+            "workflow_name": "HackerNews Summary",
+            "node_count": 3,
+            "results": [
+                {"node_name": "RSS Feed", "status": "success"},
+                {"node_name": "Content Fetch", "status": "success"},
+                {"node_name": "AI Summary", "status": "completed"}
+            ]
+        });
+
+        let result = engine.render_template(template, &data).unwrap();
+        assert!(result.contains("Hello John Doe!"));
+        assert!(result.contains("HackerNews Summary"));
+    }
+
+    #[test]
+    fn test_json_path_filter() {
+        let engine = TemplateEngine::new();
+
+        let template = r#"
+        Title: {{ data | json_path("$.title") }}
+        First item: {{ data | json_path("$.items[0].name") }}
+        "#;
+
+        let data = json!({
+            "title": "My Workflow",
+            "items": [
+                {"name": "First Item", "value": 1},
+                {"name": "Second Item", "value": 2}
+            ]
+        });
+
+        let result = engine.render_template(template, &data).unwrap();
+        assert!(result.contains("Title: My Workflow"));
+        assert!(result.contains("First item: First Item"));
+    }
+}
+```
+
+## 🔍 DATA TRANSFORMATION WITH JSONPATH
+
+### JsonPath Integration
+```rust
+use jsonpath_rust::{JsonPathFinder, JsonPathQuery};
+use serde_json::Value;
+use anyhow::{Result, Context};
+
+pub struct DataTransformer {
+    template_engine: TemplateEngine,
+}
+
+impl DataTransformer {
+    pub fn new() -> Self {
+        Self {
+            template_engine: TemplateEngine::new(),
+        }
+    }
+
+    /// Extract data using JSONPath
+    pub fn extract_json_path(&self, data: &Value, path: &str) -> Result<Value> {
+        let path_query = JsonPathQuery::from(path);
+        let result = data.path(&path_query)
+            .context("Failed to execute JSONPath query")?;
+
+        Ok(serde_json::to_value(result)?)
+    }
+
+    /// Transform data using both JSONPath extraction and template rendering
+    pub fn transform(&self, input: &Value, config: &TransformConfig) -> Result<Value> {
+        match config {
+            TransformConfig::JsonPath { path } => {
+                self.extract_json_path(input, path)
+            }
+            TransformConfig::Template { template } => {
+                let rendered = self.template_engine.render_template(template, input)?;
+                Ok(Value::String(rendered))
+            }
+            TransformConfig::Composite { extractions, template } => {
+                let mut extracted_data = serde_json::Map::new();
+
+                // Extract data using JSONPath
+                for (key, path) in extractions {
+                    let value = self.extract_json_path(input, path)?;
+                    extracted_data.insert(key.clone(), value);
+                }
+
+                // Render template with extracted data
+                let data = Value::Object(extracted_data);
+                let rendered = self.template_engine.render_template(template, &data)?;
+                Ok(Value::String(rendered))
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "type")]
+pub enum TransformConfig {
+    JsonPath {
+        path: String,
+    },
+    Template {
+        template: String,
+    },
+    Composite {
+        extractions: std::collections::HashMap<String, String>,
+        template: String,
+    },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_json_path_extraction() {
+        let transformer = DataTransformer::new();
+
+        let data = json!({
+            "rss": {
+                "items": [
+                    {"title": "Article 1", "url": "http://example.com/1"},
+                    {"title": "Article 2", "url": "http://example.com/2"}
+                ]
+            }
+        });
+
+        // Extract URLs
+        let urls = transformer.extract_json_path(&data, "$.rss.items[*].url").unwrap();
+        assert_eq!(urls, json!(["http://example.com/1", "http://example.com/2"]));
+    }
+
+    #[test]
+    fn test_composite_transformation() {
+        let transformer = DataTransformer::new();
+
+        let data = json!({
+            "articles": [
+                {"title": "First", "content": "Content 1"},
+                {"title": "Second", "content": "Content 2"}
+            ]
+        });
+
+        let config = TransformConfig::Composite {
+            extractions: [
+                ("titles".to_string(), "$.articles[*].title".to_string()),
+                ("count".to_string(), "$.articles.length()".to_string()),
+            ].into_iter().collect(),
+            template: "Found {{ count }} articles: {{ titles | join(', ') }}".to_string(),
+        };
+
+        let result = transformer.transform(&data, &config).unwrap();
+        let expected = "Found 2 articles: First, Second";
+        assert_eq!(result, Value::String(expected.to_string()));
+    }
+}
+```
+
+## 🚨 CONFIGURATION ANTI-PATTERNS
+
+### What to Avoid
+```rust
+// ❌ Don't use TOML for complex configurations
+// [server]
+// host = "0.0.0.0"
+// port = 8080
+//
+// [database]
+// url = "postgresql://..."
+// # TOML becomes unwieldy for nested structures
+
+// ❌ Don't use env_logger
+// use env_logger;
+// env_logger::init();  // Use tracing instead
+
+// ❌ Don't use handlebars for new projects
+// use handlebars::Handlebars;  // Use minijinja instead
+
+// ❌ Don't hardcode configuration values
+// let database_url = "postgresql://localhost/mydb";  // Use config files/env vars
+
+// ❌ Don't ignore configuration validation
+// pub fn load_config() -> Config {
+//     serde_yaml::from_str(&content).unwrap()  // Add proper validation
+// }
+```
+
+## ✅ TOOLS & CONFIGURATION CHECKLIST
+
+```markdown
+### Tools & Configuration Verification
+- [ ] Uses tracing instead of env_logger
+- [ ] Configuration in YAML format (not TOML)
+- [ ] All config structs use #[serde(rename_all = "camelCase")]
+- [ ] Configuration validation implemented
+- [ ] Environment variable fallbacks provided
+- [ ] MiniJinja used for templating (not handlebars)
+- [ ] JSONPath integration for data extraction
+- [ ] Custom filters and functions in templates
+- [ ] Structured logging with context
+- [ ] File rotation for production logging
+- [ ] Configuration loading from multiple sources
+- [ ] Default values provided for all config options
+```
+
+This tools and configuration standard ensures modern, maintainable, and production-ready Rust applications with proper observability and flexible configuration management.
