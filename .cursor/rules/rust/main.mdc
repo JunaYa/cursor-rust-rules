@@ -35,12 +35,14 @@ graph TD
     Features --> Web{"Web Framework<br>needed?"}
     Features --> DB{"Database<br>access needed?"}
     Features --> CLI{"CLI interface<br>needed?"}
+    Features --> GRPC{"gRPC/Protobuf<br>needed?"}
     Features --> Concurrent{"Heavy<br>concurrency?"}
     Features --> Config{"Complex config<br>or templating?"}
 
     Web -->|Yes| WebRules["Load Axum Rules"]
     DB -->|Yes| DBRules["Load Database Rules"]
     CLI -->|Yes| CLIRules["Load CLI Rules"]
+    GRPC -->|Yes| GRPCRules["Load Protobuf & gRPC Rules"]
     Concurrent -->|Yes| ConcurrencyRules["Load Concurrency Rules"]
     Config -->|Yes| ToolsRules["Load Tools & Config Rules"]
 
@@ -90,12 +92,14 @@ graph TD
     FeatureDetection --> WebFeature{"Web Framework?"}
     FeatureDetection --> DBFeature{"Database?"}
     FeatureDetection --> CLIFeature{"CLI Interface?"}
+    FeatureDetection --> GRPCFeature{"gRPC/Protobuf?"}
     FeatureDetection --> SerdeFeature{"Serialization?"}
     FeatureDetection --> BuilderFeature{"Complex Types?"}
 
     WebFeature -->|Yes| AxumRules["Axum Framework Rules"]
     DBFeature -->|Yes| SQLxRules["SQLx Database Rules"]
     CLIFeature -->|Yes| CLIRules["CLI Application Rules"]
+    GRPCFeature -->|Yes| GRPCRules["Protobuf & gRPC Rules"]
     SerdeFeature -->|Yes| SerdeRules["Serde Best Practices"]
     BuilderFeature -->|Yes| TypedBuilderRules["TypedBuilder Rules"]
 
@@ -206,6 +210,14 @@ sequenceDiagram
 - [ ] Configuration file support
 - [ ] → Load CLI rules if YES to any
 
+### Protobuf & gRPC Requirements
+- [ ] Protocol buffers for data serialization
+- [ ] gRPC service implementation needed
+- [ ] Inter-service communication required
+- [ ] Schema evolution support needed
+- [ ] High-performance RPC required
+- [ ] → Load Protobuf & gRPC rules if YES to any
+
 ### HTTP Client Requirements
 - [ ] External API integration
 - [ ] HTTP requests needed
@@ -230,6 +242,7 @@ Based on project analysis, load specific rule sets:
 # Web: core + axum + serde + utilities (JWT)
 # Database: core + sqlx + utilities (error handling)
 # CLI: core + cli + utilities (enum_dispatch + error handling)
+# gRPC: core + protobuf-grpc + utilities (typed_builder + sanitization)
 # Auth: core + utilities (JWT + validation)
 ```
 
@@ -243,6 +256,7 @@ Based on project analysis, load specific rule sets:
 | **Web** | `features/axum.mdc` | Axum 0.8 patterns, OpenAPI with utoipa |
 | **Database** | `features/database.mdc` | SQLx patterns, repository design, testing |
 | **CLI** | `features/cli.mdc` | Clap 4.0+ patterns, subcommands, enum_dispatch |
+| **Protobuf & gRPC** | `features/protobuf-grpc.mdc` | Prost/Tonic 0.13+, Inner types, MessageSanitizer, reflection |
 | **Concurrency** | `features/concurrency.mdc` | Tokio, DashMap, async patterns |
 | **Tools & Config** | `features/tools-and-config.mdc` | Tracing, YAML config, MiniJinja templates |
 | **Utilities** | `features/utilities.mdc` | JWT auth, CLI tools, builders, enhanced derives |
@@ -261,6 +275,7 @@ Based on project analysis, load specific rule sets:
 ### Complex Project Examples
 - **Workflow engines** (multi-node processing systems)
 - **Multi-service applications** (auth + business + gateway)
+- **Microservices with gRPC** (inter-service communication)
 - **Enterprise applications** (multiple domains)
 - **Database systems** with multiple engines
 - **Distributed systems** with event processing
