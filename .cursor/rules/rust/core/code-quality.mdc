@@ -22,124 +22,6 @@ alwaysApply: false
 - **Production-ready code**: All code must be deployable and maintainable
 - **No `unwrap()` or `expect()`** in production code - use proper error handling
 
-## 📦 DEPENDENCY MANAGEMENT
-
-### Workspace Dependencies Priority
-```toml
-# Always prefer workspace dependencies first
-[dependencies]
-tokio = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
-
-# Only add new dependencies if not available in workspace
-# Request permission before modifying Cargo.toml
-```
-
-### Standard Crate Recommendations
-When adding new dependencies, prefer these battle-tested crates:
-
-```toml
-# Core utilities
-anyhow = "1.0"                               # Error handling
-thiserror = "2.0"                           # Error type definitions
-derive_more = { version = "2", features = ["full"] }  # Extended derive macros
-typed-builder = "0.21"                      # Builder pattern
-
-# Async/Concurrency
-tokio = { version = "1.45", features = [
-    "macros",
-    "rt-multi-thread",
-    "signal",
-    "sync"
-] }
-async-trait = "0.1"                         # Async traits
-futures = "0.3"                             # Async utilities
-dashmap = { version = "6", features = ["serde"] }  # Concurrent HashMap
-
-# Serialization
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-serde_yaml = "0.9"
-base64 = "0.22"
-
-# Web/HTTP
-axum = { version = "0.8", features = ["macros", "http2"] }
-reqwest = { version = "0.12", default-features = false, features = [
-    "charset",
-    "rustls-tls-webpki-roots",
-    "http2",
-    "json",
-    "cookies",
-    "gzip",
-    "brotli",
-    "zstd",
-    "deflate"
-] }
-tower = { version = "0.5", features = ["util"] }
-tower-http = { version = "0.6", features = ["cors", "trace"] }
-http = "1"
-
-# Database
-sqlx = { version = "0.8", features = [
-    "chrono",
-    "postgres",
-    "runtime-tokio-rustls",
-    "sqlite",
-    "time",
-    "uuid"
-] }
-
-# Documentation/API
-utoipa = { version = "5", features = ["axum_extras"] }
-utoipa-axum = { version = "0.2" }
-utoipa-swagger-ui = { version = "9", features = [
-    "axum",
-    "vendored"
-], default-features = false }
-schemars = { version = "0.8", features = ["chrono", "url"] }
-
-# Time/Date
-chrono = { version = "0.4", features = ["serde"] }
-time = { version = "0.3", features = ["serde"] }
-
-# Templating/Text Processing
-minijinja = { version = "2", features = [
-    "json",
-    "loader",
-    "loop_controls",
-    "speedups"
-] }
-regex = "1"
-htmd = "0.2"                                # HTML to Markdown
-
-# Authentication/Security
-jsonwebtoken = "9.0"
-uuid = { version = "1.17", features = ["v4", "serde"] }
-
-# Data Processing
-jsonpath-rust = "1"
-url = "2.5"
-
-# CLI (when needed)
-clap = { version = "4.0", features = ["derive"] }
-
-# Utilities
-rand = "0.8"
-getrandom = "0.3"
-atomic_enum = "0.3"                         # Atomic enumerations
-
-# Logging/Observability
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-```
-
-### Version Strategy
-- **Always use latest versions** when adding new dependencies
-- **Request permission** before modifying `Cargo.toml`
-- **Check workspace first** - never duplicate dependencies unnecessarily
-- **Use specific feature flags** to minimize compilation time and binary size
-- **Prefer rustls over openssl** for TLS (better for cross-compilation)
-
 ## 🏗️ CODE STRUCTURE PATTERNS
 
 ### Data Structure Organization
@@ -332,19 +214,6 @@ pub struct DatabaseManagerImpl;
 // Any file > 500 lines (excluding tests) needs refactoring
 ```
 
-### Dependency Anti-Patterns
-```rust
-// ❌ Don't duplicate workspace dependencies
-[dependencies]
-tokio = "1.0"  # Already in workspace
-
-// ❌ Don't modify Cargo.toml without permission
-# Always ask before adding new dependencies
-
-// ❌ Don't use outdated versions
-serde = "0.9"  # Use latest stable
-```
-
 ## ✅ QUALITY CHECKLIST
 
 ```markdown
@@ -362,7 +231,6 @@ serde = "0.9"  # Use latest stable
 - [ ] `cargo test` passes
 - [ ] `cargo clippy` passes with no warnings
 - [ ] Public APIs documented with examples
-- [ ] Workspace dependencies used when available
 ```
 
 This code quality standard ensures consistent, maintainable, and production-ready Rust code across all projects.

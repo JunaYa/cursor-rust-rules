@@ -135,7 +135,9 @@ pub struct DatabaseConfig {
 pub struct AuthConfig {
     pub jwt_secret: String,
     pub token_expiry_hours: u64,
-    pub bcrypt_cost: u32,
+    pub argon2_mem_cost: u32,
+    pub argon2_time_cost: u32,
+    pub argon2_parallelism: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -180,8 +182,14 @@ impl AppConfig {
                 token_expiry_hours: std::env::var("TOKEN_EXPIRY_HOURS")
                     .unwrap_or_else(|_| "24".to_string())
                     .parse()?,
-                bcrypt_cost: std::env::var("BCRYPT_COST")
-                    .unwrap_or_else(|_| "12".to_string())
+                argon2_mem_cost: std::env::var("ARGON2_MEM_COST")
+                    .unwrap_or_else(|_| "65536".to_string())
+                    .parse()?,
+                argon2_time_cost: std::env::var("ARGON2_TIME_COST")
+                    .unwrap_or_else(|_| "3".to_string())
+                    .parse()?,
+                argon2_parallelism: std::env::var("ARGON2_PARALLELISM")
+                    .unwrap_or_else(|_| "4".to_string())
                     .parse()?,
             },
             features: FeatureFlags {
@@ -218,7 +226,9 @@ impl Default for AppConfig {
             auth: AuthConfig {
                 jwt_secret: "development-secret".to_string(),
                 token_expiry_hours: 24,
-                bcrypt_cost: 12,
+                argon2_mem_cost: 65536,
+                argon2_time_cost: 3,
+                argon2_parallelism: 4,
             },
             features: FeatureFlags {
                 enable_registration: true,

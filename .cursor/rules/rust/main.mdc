@@ -77,7 +77,12 @@ graph TD
     Main --> Complexity{"Project<br>Complexity?"}
 
     Core --> Quality["Code Quality Rules"]
-    Core --> Testing["Testing Standards"]
+    Core --> Dependencies["Dependency Management"]
+    Core --> Types["Type System Patterns"]
+    Core --> Performance["Performance Guidelines"]
+    Core --> Security["Security Standards"]
+    Core --> API["API Design Principles"]
+    Core --> Patterns["Design Patterns"]
     Core --> ErrorHandling["Error Handling"]
 
     Complexity -->|Simple| SimpleRules["Simple Project Rules"]
@@ -112,10 +117,15 @@ graph TD
 ## 📋 CORE PRINCIPLES (ALWAYS APPLIED)
 
 1. **Code Quality**: Follow DRY/SRP principles, function size limits
-2. **File Organization**: Functionality-based structure, not type-based
-3. **Error Handling**: Consistent error handling patterns
-4. **Testing**: Comprehensive unit test coverage
-5. **Documentation**: Clear, maintainable code documentation
+2. **Dependencies**: Workspace-first, security-focused dependency management
+3. **Type System**: Leverage newtype patterns, phantom types, and zero-cost abstractions
+4. **Performance**: Profile-driven optimization, memory-efficient patterns
+5. **Security**: Input validation, secure secrets management, authorization
+6. **API Design**: Ergonomic interfaces, builder patterns, comprehensive documentation
+7. **File Organization**: Functionality-based structure, not type-based
+8. **Error Handling**: Consistent error handling patterns with structured errors
+9. **Testing**: Comprehensive unit test coverage with mocking strategies
+10. **Documentation**: Clear, maintainable code documentation with examples
 
 ## 🚀 PROJECT INITIALIZATION WORKFLOW
 
@@ -251,6 +261,12 @@ Based on project analysis, load specific rule sets:
 | Module | File | Description |
 |--------|------|-------------|
 | **Core** | `core/code-quality.mdc` | Rust 2024, no unsafe, production-ready code |
+| **Core** | `core/dependencies.mdc` | Centralized dependency management and workspace patterns |
+| **Core** | `core/type-system.mdc` | Type system mastery, newtype patterns, phantom types |
+| **Core** | `core/performance.mdc` | Performance optimization, SIMD, memory management |
+| **Core** | `core/security.mdc` | Security patterns, Argon2 hashing, encryption |
+| **Core** | `core/api-design.mdc` | Ergonomic API design, builder patterns, trait design |
+| **Core** | `core/design-patterns.mdc` | Essential design patterns, actor model, strategy |
 | **Simple** | `simple/single-crate.mdc` | Single crate project structure |
 | **Complex** | `complex/workspace.mdc` | Multi-crate workspace management |
 | **Web** | `features/axum.mdc` | Axum 0.8 patterns, OpenAPI with utoipa |

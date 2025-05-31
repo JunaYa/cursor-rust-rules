@@ -7,6 +7,39 @@ alwaysApply: false
 
 > **TL;DR:** Essential tools and configuration patterns for modern Rust applications, focusing on logging, configuration management, and templating.
 
+## 🔍 TOOLS & CONFIGURATION STRATEGY
+
+```mermaid
+graph TD
+    Start["Application Setup"] --> ConfigType{"Configuration<br>Complexity?"}
+
+    ConfigType -->|Simple| EnvVars["Environment Variables"]
+    ConfigType -->|Complex| YAMLConfig["YAML Configuration"]
+
+    EnvVars --> Logging["Logging Setup"]
+    YAMLConfig --> ConfigValidation["Configuration Validation"]
+    ConfigValidation --> Logging
+
+    Logging --> StructuredLogging["Structured Logging"]
+    StructuredLogging --> LogRotation["Log Rotation"]
+
+    LogRotation --> Templating{"Template<br>Engine Needed?"}
+
+    Templating -->|Yes| MiniJinja["MiniJinja Templates"]
+    Templating -->|No| DataProcessing["Data Processing"]
+
+    MiniJinja --> DataProcessing
+    DataProcessing --> JSONPath["JSON Path Extraction"]
+
+    JSONPath --> Monitoring["Application Monitoring"]
+    Monitoring --> Production["Production Tools"]
+
+    style Start fill:#4da6ff,stroke:#0066cc,color:white
+    style YAMLConfig fill:#4dbb5f,stroke:#36873f,color:white
+    style StructuredLogging fill:#ffa64d,stroke:#cc7a30,color:white
+    style MiniJinja fill:#d94dbb,stroke:#a3378a,color:white
+```
+
 ## 📊 LOGGING AND OBSERVABILITY
 
 ### Tracing Ecosystem (Not env_logger)

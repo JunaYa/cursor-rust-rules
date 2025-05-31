@@ -7,6 +7,49 @@ alwaysApply: false
 
 > **TL;DR:** Essential utility patterns for authentication, CLI tools, data structures, and common development tasks.
 
+## 🔍 UTILITY LIBRARY SELECTION STRATEGY
+
+```mermaid
+graph TD
+    Start["Utility Requirements"] --> UtilityType{"Utility<br>Category?"}
+
+    UtilityType -->|Authentication| AuthUtils["Authentication Utilities"]
+    UtilityType -->|CLI Tools| CLIUtils["CLI Utilities"]
+    UtilityType -->|Data Structures| DataUtils["Data Structure Utilities"]
+    UtilityType -->|Validation| ValidationUtils["Validation Utilities"]
+
+    AuthUtils --> JWT["JWT Token Management"]
+    AuthUtils --> PasswordHash["Password Hashing"]
+
+    CLIUtils --> ClapCLI["Clap CLI Framework"]
+    CLIUtils --> ProgressBars["Progress Indicators"]
+
+    DataUtils --> TypedBuilder["TypedBuilder Pattern"]
+    DataUtils --> EnumDispatch["enum_dispatch"]
+
+    ValidationUtils --> SerdeValidation["Serde Validation"]
+    ValidationUtils --> CustomValidation["Custom Validators"]
+
+    JWT --> Security["Security Implementation"]
+    PasswordHash --> Security
+    ClapCLI --> UserInterface["User Interface"]
+    ProgressBars --> UserInterface
+    TypedBuilder --> CodeGeneration["Code Generation"]
+    EnumDispatch --> CodeGeneration
+    SerdeValidation --> DataIntegrity["Data Integrity"]
+    CustomValidation --> DataIntegrity
+
+    Security --> Production["Production Utilities"]
+    UserInterface --> Production
+    CodeGeneration --> Production
+    DataIntegrity --> Production
+
+    style Start fill:#4da6ff,stroke:#0066cc,color:white
+    style AuthUtils fill:#4dbb5f,stroke:#36873f,color:white
+    style CLIUtils fill:#ffa64d,stroke:#cc7a30,color:white
+    style DataUtils fill:#d94dbb,stroke:#a3378a,color:white
+```
+
 ## 🔐 AUTHENTICATION AND SECURITY
 
 ### JWT with jsonwebtoken

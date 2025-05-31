@@ -7,6 +7,40 @@ alwaysApply: false
 
 > **TL;DR:** Modern CLI application patterns using clap 4.0+ with derive features, subcommands, enum_dispatch, and production-ready command execution architecture.
 
+## 🔍 CLI APPLICATION DESIGN STRATEGY
+
+```mermaid
+graph TD
+    Start["CLI Application"] --> CLIType{"CLI<br>Complexity?"}
+
+    CLIType -->|Simple| SimpleCLI["Single Command CLI"]
+    CLIType -->|Complex| ComplexCLI["Multi-Command CLI"]
+
+    SimpleCLI --> DirectExecution["Direct Execution"]
+    ComplexCLI --> SubcommandArch["Subcommand Architecture"]
+
+    SubcommandArch --> EnumDispatch["enum_dispatch Pattern"]
+    EnumDispatch --> TraitExecution["CommandExecutor Trait"]
+
+    DirectExecution --> ErrorHandling["Error Handling"]
+    TraitExecution --> ErrorHandling
+
+    ErrorHandling --> UserFeedback["User Feedback"]
+    UserFeedback --> ProgressIndicators["Progress Indicators"]
+    ProgressIndicators --> Configuration["Configuration Management"]
+
+    Configuration --> Testing["CLI Testing"]
+    Testing --> Documentation["Help & Documentation"]
+    Documentation --> Completion["Shell Completion"]
+
+    Completion --> Production["Production CLI"]
+
+    style Start fill:#4da6ff,stroke:#0066cc,color:white
+    style SimpleCLI fill:#4dbb5f,stroke:#36873f,color:white
+    style ComplexCLI fill:#ffa64d,stroke:#cc7a30,color:white
+    style EnumDispatch fill:#d94dbb,stroke:#a3378a,color:white
+```
+
 ## 🎯 CLI FRAMEWORK REQUIREMENTS
 
 ### Clap 4.0+ Configuration

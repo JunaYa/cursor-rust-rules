@@ -167,3 +167,5 @@ async pub fn say_hello(
 4. 不要添加 protoc_arg
 5. 对 primitive type 不需要 sanitize_otional_xxx。
 6. TypedBuilder 用法遵循:并对每个字段根据情况引入 default, default_code, 以及 setter(strip_option), setter(into), 或者 setter(strip_option, into)。比如 Option<String> 要使用 `#[builder(default, setter(strip_option, into)]`. 不要滥用 default。
+
+请仔细审核 @/rust rule set，看各部分内容是否有重复，是否正交，请相应修改和重构，另外，如果还有 best practice 和 rust 最佳实践和设计模式没有写进去，请添加。

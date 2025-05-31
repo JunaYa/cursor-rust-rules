@@ -911,7 +911,7 @@ chrono = { workspace = true }
 uuid = { workspace = true }
 
 # Domain-specific dependencies
-bcrypt = "0.15"
+argon2 = "0.5"
 validator = { version = "0.18", features = ["derive"] }
 regex = { workspace = true }
 

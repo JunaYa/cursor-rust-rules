@@ -7,6 +7,42 @@ alwaysApply: false
 
 > **TL;DR:** Modern async/await patterns and thread-safe data structures for high-performance Rust applications.
 
+## 🔍 CONCURRENCY ARCHITECTURE STRATEGY
+
+```mermaid
+graph TD
+    Start["Concurrency Requirements"] --> ConcurrencyType{"Concurrency<br>Pattern?"}
+
+    ConcurrencyType -->|Async I/O| AsyncPattern["Async/Await Pattern"]
+    ConcurrencyType -->|CPU Intensive| ParallelPattern["Parallel Processing"]
+    ConcurrencyType -->|Shared State| SharedStatePattern["Shared State Management"]
+    ConcurrencyType -->|Message Passing| MessagePattern["Message Passing"]
+
+    AsyncPattern --> TokioRuntime["Tokio Runtime"]
+    ParallelPattern --> Rayon["Rayon Parallel Iterators"]
+    SharedStatePattern --> DashMap["DashMap Collections"]
+    MessagePattern --> Channels["Channel Communication"]
+
+    TokioRuntime --> AsyncPrimitives["Async Sync Primitives"]
+    Rayon --> ThreadPool["Thread Pool Management"]
+    DashMap --> LockFree["Lock-Free Data Structures"]
+    Channels --> ChannelTypes["Channel Type Selection"]
+
+    AsyncPrimitives --> ErrorHandling["Error Handling"]
+    ThreadPool --> ErrorHandling
+    LockFree --> ErrorHandling
+    ChannelTypes --> ErrorHandling
+
+    ErrorHandling --> Testing["Concurrency Testing"]
+    Testing --> Performance["Performance Monitoring"]
+    Performance --> Production["Production Concurrency"]
+
+    style Start fill:#4da6ff,stroke:#0066cc,color:white
+    style AsyncPattern fill:#4dbb5f,stroke:#36873f,color:white
+    style SharedStatePattern fill:#ffa64d,stroke:#cc7a30,color:white
+    style MessagePattern fill:#d94dbb,stroke:#a3378a,color:white
+```
+
 ## 🎯 ASYNC RUNTIME SELECTION
 
 ### Tokio as the Standard
