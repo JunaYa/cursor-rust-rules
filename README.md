@@ -45,6 +45,7 @@ rules:
   - "@rust/main"          # Core Rust standards
   - "@rust/axum"          # Web development with Axum
   - "@rust/database"      # Database patterns with SQLx
+  - "@rust/cli"           # CLI applications with clap
   - "@rust/concurrency"   # Async and concurrency patterns
   - "@rust/utilities"     # Utility libraries and CLI tools
   - "@rust/workspace"     # Multi-crate workspace organization
@@ -71,6 +72,7 @@ cursor-rust-rules/
 │   ├── features/                # Feature-specific rules
 │   │   ├── axum.mdc            # Web framework standards
 │   │   ├── database.mdc        # Database patterns
+│   │   ├── cli.mdc             # CLI application patterns
 │   │   ├── concurrency.mdc     # Async/concurrency patterns
 │   │   ├── utilities.mdc       # Utility libraries
 │   │   ├── http-client.mdc     # HTTP client patterns
@@ -90,6 +92,7 @@ cursor-rust-rules/
 
 - **Web Framework** (`@rust/features/axum`) - Axum 0.8+, OpenAPI, middleware, authentication
 - **Database** (`@rust/features/database`) - SQLx patterns, migrations, connection pooling
+- **CLI Applications** (`@rust/features/cli`) - Clap 4.0+, subcommands, enum_dispatch, modern CLI patterns
 - **Concurrency** (`@rust/features/concurrency`) - Tokio, async patterns, concurrent data structures
 - **Utilities** (`@rust/features/utilities`) - JWT, CLI tools, builder patterns, validation
 - **HTTP Client** (`@rust/features/http-client`) - Reqwest patterns, retry logic, authentication
@@ -166,6 +169,52 @@ pub async fn setup_database(config: &DatabaseConfig) -> Result<PgPool, DatabaseE
 
     sqlx::migrate!("./migrations").run(&pool).await?;
     Ok(pool)
+}
+```
+
+### CLI Application Development
+
+For building powerful command-line tools:
+
+```rust
+// Cargo.toml gets configured with these dependencies
+[dependencies]
+clap = { version = "4.0", features = ["derive", "env", "unicode"] }
+enum_dispatch = "0.3"
+tokio = { version = "1.45", features = ["macros", "rt-multi-thread"] }
+anyhow = "1.0"
+colored = "2.0"
+```
+
+Your CLI follows the enum_dispatch pattern:
+
+```rust
+/// Command execution trait with enum_dispatch
+#[async_trait]
+#[enum_dispatch(Commands)]
+pub trait CommandExecutor {
+    async fn execute(&self, args: &Args, config: &Config) -> Result<()>;
+}
+
+/// All available commands
+#[derive(Debug, Subcommand)]
+#[enum_dispatch(CommandExecutor)]
+pub enum Commands {
+    /// Database management commands
+    #[command(name = "db", alias = "database")]
+    Database(DatabaseCommand),
+
+    /// Server management commands
+    #[command(name = "server", alias = "srv")]
+    Server(ServerCommand),
+}
+
+// Each command implements CommandExecutor
+#[async_trait]
+impl CommandExecutor for DatabaseCommand {
+    async fn execute(&self, args: &Args, config: &Config) -> Result<()> {
+        // Command implementation with progress bars, colored output, etc.
+    }
 }
 ```
 

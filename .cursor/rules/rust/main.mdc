@@ -34,11 +34,13 @@ graph TD
 
     Features --> Web{"Web Framework<br>needed?"}
     Features --> DB{"Database<br>access needed?"}
+    Features --> CLI{"CLI interface<br>needed?"}
     Features --> Concurrent{"Heavy<br>concurrency?"}
     Features --> Config{"Complex config<br>or templating?"}
 
     Web -->|Yes| WebRules["Load Axum Rules"]
     DB -->|Yes| DBRules["Load Database Rules"]
+    CLI -->|Yes| CLIRules["Load CLI Rules"]
     Concurrent -->|Yes| ConcurrencyRules["Load Concurrency Rules"]
     Config -->|Yes| ToolsRules["Load Tools & Config Rules"]
 
@@ -87,11 +89,13 @@ graph TD
 
     FeatureDetection --> WebFeature{"Web Framework?"}
     FeatureDetection --> DBFeature{"Database?"}
+    FeatureDetection --> CLIFeature{"CLI Interface?"}
     FeatureDetection --> SerdeFeature{"Serialization?"}
     FeatureDetection --> BuilderFeature{"Complex Types?"}
 
     WebFeature -->|Yes| AxumRules["Axum Framework Rules"]
     DBFeature -->|Yes| SQLxRules["SQLx Database Rules"]
+    CLIFeature -->|Yes| CLIRules["CLI Application Rules"]
     SerdeFeature -->|Yes| SerdeRules["Serde Best Practices"]
     BuilderFeature -->|Yes| TypedBuilderRules["TypedBuilder Rules"]
 
@@ -194,6 +198,14 @@ sequenceDiagram
 - [ ] Custom error types
 - [ ] → Load Utilities rules if YES to any
 
+### CLI Application Requirements
+- [ ] Command-line interface needed
+- [ ] Multiple subcommands required
+- [ ] Interactive prompts needed
+- [ ] Progress bars or status indicators
+- [ ] Configuration file support
+- [ ] → Load CLI rules if YES to any
+
 ### HTTP Client Requirements
 - [ ] External API integration
 - [ ] HTTP requests needed
@@ -217,7 +229,7 @@ Based on project analysis, load specific rule sets:
 # Feature-specific loading examples:
 # Web: core + axum + serde + utilities (JWT)
 # Database: core + sqlx + utilities (error handling)
-# CLI: core + simple + utilities (clap + builders)
+# CLI: core + cli + utilities (enum_dispatch + error handling)
 # Auth: core + utilities (JWT + validation)
 ```
 
@@ -230,6 +242,7 @@ Based on project analysis, load specific rule sets:
 | **Complex** | `complex/workspace.mdc` | Multi-crate workspace management |
 | **Web** | `features/axum.mdc` | Axum 0.8 patterns, OpenAPI with utoipa |
 | **Database** | `features/database.mdc` | SQLx patterns, repository design, testing |
+| **CLI** | `features/cli.mdc` | Clap 4.0+ patterns, subcommands, enum_dispatch |
 | **Concurrency** | `features/concurrency.mdc` | Tokio, DashMap, async patterns |
 | **Tools & Config** | `features/tools-and-config.mdc` | Tracing, YAML config, MiniJinja templates |
 | **Utilities** | `features/utilities.mdc` | JWT auth, CLI tools, builders, enhanced derives |
@@ -240,10 +253,10 @@ Based on project analysis, load specific rule sets:
 ## 🎯 PROJECT TYPE EXAMPLES
 
 ### Simple Project Examples
-- CLI utilities (grep clone, file converter)
-- Single-purpose libraries (parsing, algorithms)
-- Simple HTTP servers (< 10 endpoints)
-- Desktop applications (single-window apps)
+- **CLI utilities** (grep clone, file converter, system tools)
+- **Single-purpose libraries** (parsing, algorithms)
+- **Simple HTTP servers** (< 10 endpoints)
+- **Desktop applications** (single-window apps)
 
 ### Complex Project Examples
 - **Workflow engines** (multi-node processing systems)
