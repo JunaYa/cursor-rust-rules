@@ -10,8 +10,8 @@ alwaysApply: false
 ## 🎯 FUNDAMENTAL PRINCIPLES
 
 ### Code Organization
-- **Functionality-based files**: Use meaningful file names like `node.rs`, `workflow.rs`, `execution.rs` instead of generic `models.rs`, `traits.rs`, `types.rs`
-- **Meaningful naming**: Avoid names like `WorkflowValidatorImpl` - use descriptive, specific names
+- **Functionality-based files**: Use meaningful file names like `user.rs`, `product.rs`, `auth.rs` instead of generic `models.rs`, `traits.rs`, `types.rs`
+- **Meaningful naming**: Avoid names like `UserServiceImpl` - use descriptive, specific names
 - **File size limits**: Maximum 500 lines per file (excluding tests)
 - **Function size**: Maximum 150 lines per function
 - **Single Responsibility**: Each module should have one clear purpose
@@ -35,34 +35,135 @@ serde = { workspace = true, features = ["derive"] }
 # Request permission before modifying Cargo.toml
 ```
 
+### Standard Crate Recommendations
+When adding new dependencies, prefer these battle-tested crates:
+
+```toml
+# Core utilities
+anyhow = "1.0"                               # Error handling
+thiserror = "2.0"                           # Error type definitions
+derive_more = { version = "2", features = ["full"] }  # Extended derive macros
+typed-builder = "0.21"                      # Builder pattern
+
+# Async/Concurrency
+tokio = { version = "1.45", features = [
+    "macros",
+    "rt-multi-thread",
+    "signal",
+    "sync"
+] }
+async-trait = "0.1"                         # Async traits
+futures = "0.3"                             # Async utilities
+dashmap = { version = "6", features = ["serde"] }  # Concurrent HashMap
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+base64 = "0.22"
+
+# Web/HTTP
+axum = { version = "0.8", features = ["macros", "http2"] }
+reqwest = { version = "0.12", default-features = false, features = [
+    "charset",
+    "rustls-tls-webpki-roots",
+    "http2",
+    "json",
+    "cookies",
+    "gzip",
+    "brotli",
+    "zstd",
+    "deflate"
+] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+http = "1"
+
+# Database
+sqlx = { version = "0.8", features = [
+    "chrono",
+    "postgres",
+    "runtime-tokio-rustls",
+    "sqlite",
+    "time",
+    "uuid"
+] }
+
+# Documentation/API
+utoipa = { version = "5", features = ["axum_extras"] }
+utoipa-axum = { version = "0.2" }
+utoipa-swagger-ui = { version = "9", features = [
+    "axum",
+    "vendored"
+], default-features = false }
+schemars = { version = "0.8", features = ["chrono", "url"] }
+
+# Time/Date
+chrono = { version = "0.4", features = ["serde"] }
+time = { version = "0.3", features = ["serde"] }
+
+# Templating/Text Processing
+minijinja = { version = "2", features = [
+    "json",
+    "loader",
+    "loop_controls",
+    "speedups"
+] }
+regex = "1"
+htmd = "0.2"                                # HTML to Markdown
+
+# Authentication/Security
+jsonwebtoken = "9.0"
+uuid = { version = "1.17", features = ["v4", "serde"] }
+
+# Data Processing
+jsonpath-rust = "1"
+url = "2.5"
+
+# CLI (when needed)
+clap = { version = "4.0", features = ["derive"] }
+
+# Utilities
+rand = "0.8"
+getrandom = "0.3"
+atomic_enum = "0.3"                         # Atomic enumerations
+
+# Logging/Observability
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+```
+
 ### Version Strategy
 - **Always use latest versions** when adding new dependencies
 - **Request permission** before modifying `Cargo.toml`
 - **Check workspace first** - never duplicate dependencies unnecessarily
+- **Use specific feature flags** to minimize compilation time and binary size
+- **Prefer rustls over openssl** for TLS (better for cross-compilation)
 
 ## 🏗️ CODE STRUCTURE PATTERNS
 
 ### Data Structure Organization
 ```rust
 // ✅ Good: Functionality-based organization
-// src/workflow.rs - All workflow-related types and logic
+// src/user.rs - All user-related types and logic
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]  // Always use camelCase for JSON serialization
-pub struct WorkflowDefinition {
-    pub workflow_id: String,
+pub struct User {
+    pub user_id: String,
     pub display_name: String,
+    pub email: String,
     pub created_at: DateTime<Utc>,
 }
 
 // ✅ Good: Meaningful trait names
-pub trait WorkflowValidator {
-    fn validate(&self, workflow: &WorkflowDefinition) -> Result<(), ValidationError>;
+pub trait UserValidator {
+    fn validate(&self, user: &User) -> Result<(), ValidationError>;
 }
 
 // ❌ Bad: Generic file organization
 // src/models.rs, src/traits.rs, src/types.rs
 // ❌ Bad: Poor naming
-// struct WorkflowValidatorImpl
+// struct UserValidatorImpl
 ```
 
 ### Serde Configuration
@@ -71,13 +172,13 @@ pub trait WorkflowValidator {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApiResponse {
-    pub workflow_id: String,
+    pub user_id: String,
     pub created_at: DateTime<Utc>,
     pub is_active: bool,
 }
 
 // This serializes to:
-// {"workflowId": "...", "createdAt": "...", "isActive": true}
+// {"userId": "...", "createdAt": "...", "isActive": true}
 ```
 
 ## 🔧 BUILD AND QUALITY CHECKS
@@ -115,30 +216,30 @@ expect_used = "deny"
 ```rust
 // ✅ Good: Feature-based modules
 src/
-├── workflow/
+├── user/
 │   ├── mod.rs
-│   ├── validator.rs     // WorkflowValidator trait and implementations
-│   ├── executor.rs      // WorkflowExecutor logic
-│   └── definition.rs    // WorkflowDefinition types
-├── node/
+│   ├── service.rs       // UserService logic
+│   ├── repository.rs    // User data access
+│   └── validator.rs     // User validation
+├── product/
 │   ├── mod.rs
-│   ├── registry.rs      // NodeRegistry (not NodeTypeRegistry)
-│   └── executor.rs      // Node execution logic
-└── storage/
+│   ├── catalog.rs       // Product catalog logic
+│   └── pricing.rs       // Product pricing logic
+└── auth/
     ├── mod.rs
-    ├── entities.rs      // Database entities
-    └── repositories.rs  // Data access patterns
+    ├── token.rs         // Token management
+    └── session.rs       // Session handling
 ```
 
 ### Naming Best Practices
 ```rust
 // ✅ Good naming examples
-pub struct WorkflowValidator;          // Clear, specific
-pub struct NodeExecutor;               // Action-oriented
+pub struct UserService;                // Clear, specific
+pub struct ProductCatalog;             // Action-oriented
 pub struct DatabaseConnection;         // Descriptive
 
 // ❌ Bad naming examples
-pub struct WorkflowValidatorImpl;      // Unnecessary "Impl" suffix
+pub struct UserServiceImpl;            // Unnecessary "Impl" suffix
 pub struct Helper;                     // Too generic
 pub struct Manager;                    // Vague responsibility
 ```
@@ -153,15 +254,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_workflow_validation() {
-        let validator = WorkflowValidator::new();
-        let workflow = WorkflowDefinition::default();
-        assert!(validator.validate(&workflow).is_ok());
+    fn test_user_validation() {
+        let validator = UserValidator::new();
+        let user = User::default();
+        assert!(validator.validate(&user).is_ok());
     }
 }
 
 // ❌ Don't create separate test files for unit tests
-// tests/workflow_test.rs (this is for integration tests only)
+// tests/user_test.rs (this is for integration tests only)
 ```
 
 ### Test Naming
@@ -171,12 +272,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_valid_workflow_passes_validation() {
+    fn test_valid_email_passes_validation() {
         // Test name clearly describes the scenario
     }
 
     #[test]
-    fn test_empty_workflow_id_returns_error() {
+    fn test_empty_email_returns_error() {
         // Specific about what's being tested
     }
 }
@@ -186,26 +287,27 @@ mod tests {
 
 ### Code Documentation
 ```rust
-/// Validates workflow definitions according to business rules.
+/// Validates user data according to business rules.
 ///
 /// # Examples
 ///
 /// ```rust
-/// let validator = WorkflowValidator::new();
-/// let workflow = WorkflowDefinition::builder()
-///     .workflow_id("test-workflow")
+/// let validator = UserValidator::new();
+/// let user = User::builder()
+///     .email("user@example.com")
+///     .display_name("John Doe")
 ///     .build();
 ///
-/// assert!(validator.validate(&workflow).is_ok());
+/// assert!(validator.validate(&user).is_ok());
 /// ```
 ///
 /// # Errors
 ///
 /// Returns `ValidationError` if:
-/// - Workflow ID is empty or invalid
+/// - Email is empty or invalid format
+/// - Display name is too long
 /// - Required fields are missing
-/// - Business rules are violated
-pub struct WorkflowValidator {
+pub struct UserValidator {
     rules: Vec<ValidationRule>,
 }
 ```
@@ -220,7 +322,7 @@ pub struct WorkflowValidator {
 // src/helpers.rs - unclear responsibility
 
 // ❌ Don't use implementation suffixes
-pub struct WorkflowValidatorImpl;
+pub struct UserValidatorImpl;
 pub struct DatabaseManagerImpl;
 
 // ❌ Don't mix concerns in single files

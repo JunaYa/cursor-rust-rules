@@ -18,7 +18,13 @@ alwaysApply: false
 ```toml
 # Cargo.toml - SQLx configuration
 [dependencies]
-sqlx = { workspace = true, features = ["runtime-tokio-rustls", "postgres", "sqlite", "uuid", "chrono", "json"] }
+sqlx = { version = "0.8", features = [
+    "chrono",
+    "postgres",
+    "runtime-tokio-rustls",
+    "sqlite",
+    "uuid"
+] }
 ```
 
 ## 🔧 QUERY PATTERNS
@@ -28,23 +34,23 @@ sqlx = { workspace = true, features = ["runtime-tokio-rustls", "postgres", "sqli
 // ✅ Preferred: Use sqlx::query_as with custom types
 #[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WorkflowExecution {
+pub struct User {
     pub id: Uuid,
-    pub workflow_id: String,
-    pub status: ExecutionStatus,
+    pub username: String,
+    pub email: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub metadata: Option<serde_json::Value>,
+    pub is_active: bool,
 }
 
-impl WorkflowExecution {
+impl User {
     pub async fn find_by_id(
         pool: &PgPool,
         id: Uuid
     ) -> Result<Option<Self>, sqlx::Error> {
-        sqlx::query_as::<_, WorkflowExecution>(
-            "SELECT id, workflow_id, status, created_at, updated_at, metadata
-             FROM workflow_executions
+        sqlx::query_as::<_, User>(
+            "SELECT id, username, email, created_at, updated_at, is_active
+             FROM users
              WHERE id = $1"
         )
         .bind(id)
@@ -52,20 +58,18 @@ impl WorkflowExecution {
         .await
     }
 
-    pub async fn list_by_workflow(
+    pub async fn list_active_users(
         pool: &PgPool,
-        workflow_id: &str,
         limit: i64,
         offset: i64,
     ) -> Result<Vec<Self>, sqlx::Error> {
-        sqlx::query_as::<_, WorkflowExecution>(
-            "SELECT id, workflow_id, status, created_at, updated_at, metadata
-             FROM workflow_executions
-             WHERE workflow_id = $1
+        sqlx::query_as::<_, User>(
+            "SELECT id, username, email, created_at, updated_at, is_active
+             FROM users
+             WHERE is_active = true
              ORDER BY created_at DESC
-             LIMIT $2 OFFSET $3"
+             LIMIT $1 OFFSET $2"
         )
-        .bind(workflow_id)
         .bind(limit)
         .bind(offset)
         .fetch_all(pool)
@@ -88,28 +92,33 @@ use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct User {
+pub struct Product {
     pub id: Uuid,
-    pub username: String,
-    pub email: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub price: rust_decimal::Decimal,
+    pub category_id: Uuid,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub is_active: bool,
+    pub is_available: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CreateUserRequest {
-    pub username: String,
-    pub email: String,
+pub struct CreateProductRequest {
+    pub name: String,
+    pub description: Option<String>,
+    pub price: rust_decimal::Decimal,
+    pub category_id: Uuid,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct UpdateUserRequest {
-    pub username: Option<String>,
-    pub email: Option<String>,
-    pub is_active: Option<bool>,
+pub struct UpdateProductRequest {
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub price: Option<rust_decimal::Decimal>,
+    pub is_available: Option<bool>,
 }
 ```
 
@@ -340,6 +349,37 @@ $$ language 'plpgsql';
 
 CREATE TRIGGER update_users_updated_at
     BEFORE UPDATE ON users
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+```
+
+### Product Table Example
+```sql
+-- migrations/20240501000002_create_products_table.sql
+CREATE TABLE categories (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL UNIQUE,
+    description TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE products (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    price DECIMAL(10,2) NOT NULL,
+    category_id UUID NOT NULL REFERENCES categories(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    is_available BOOLEAN NOT NULL DEFAULT true
+);
+
+CREATE INDEX idx_products_category ON products(category_id);
+CREATE INDEX idx_products_price ON products(price);
+CREATE INDEX idx_products_name ON products(name);
+
+CREATE TRIGGER update_products_updated_at
+    BEFORE UPDATE ON products
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 ```
