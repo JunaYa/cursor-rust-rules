@@ -179,3 +179,7 @@ async pub fn say_hello(
 5. @/features 规则是合理的，且利于产生高质量且简洁的代码
 6. 这些 rules 无论对新项目还是老项目都能够产生高质量且简洁的代码
 如果你发现需要任何修改，请在 ./spec/ 下生成一个详细的修改计划
+
+请仔细阅读 @/rust  rule sets， 然根据下面列出的 prompt，找出 common best practice，在 specs 目录下生成一个你想如何更新 rust rules 的详细计划。注意，如果你要添加新的代码示例，请确保它是足够 common 的。如果根据以下内容你觉得需要新建一个 pingora 的 rules，请也在新的计划文件中详细说明。
+
+请更新 @rust-rules-improvement-plan.md 里的代码足够 common，不要包含特定的内容，而且内容需要保持正交（hot-reloading 出现一次就可以了）。之后，请按照计划更新或者生成新的 rules。不必更新 performance.mdc，不必更新 api-design.mdc，也不必添加 pingora.mdc
