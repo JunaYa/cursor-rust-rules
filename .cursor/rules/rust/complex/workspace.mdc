@@ -7,6 +7,39 @@ alwaysApply: false
 
 > **TL;DR:** Guidelines for organizing complex Rust projects using workspace architecture with multiple crates, clear subsystem boundaries, and domain-driven design principles.
 
+## 🔍 WORKSPACE ARCHITECTURE STRATEGY
+
+```mermaid
+graph TD
+    Start["Complex Project"] --> ArchType{"Architecture<br>Pattern?"}
+
+    ArchType -->|Domain-Driven| DomainArch["Domain-Based Architecture"]
+    ArchType -->|Service-Oriented| ServiceArch["Service-Based Architecture"]
+    ArchType -->|Layered| LayeredArch["Layered Architecture"]
+
+    DomainArch --> DomainCrates["Domain-Specific Crates"]
+    ServiceArch --> ServiceCrates["Service-Specific Crates"]
+    LayeredArch --> LayerCrates["Layer-Specific Crates"]
+
+    DomainCrates --> SharedInfra["Shared Infrastructure"]
+    ServiceCrates --> SharedInfra
+    LayerCrates --> SharedInfra
+
+    SharedInfra --> WorkspaceDeps["Workspace Dependencies"]
+    WorkspaceDeps --> CrateOrganization["Crate Organization"]
+
+    CrateOrganization --> IntegrationTesting["Integration Testing"]
+    IntegrationTesting --> BuildOptimization["Build Optimization"]
+    BuildOptimization --> Documentation["Workspace Documentation"]
+
+    Documentation --> Production["Production Workspace"]
+
+    style Start fill:#4da6ff,stroke:#0066cc,color:white
+    style DomainArch fill:#4dbb5f,stroke:#36873f,color:white
+    style ServiceArch fill:#ffa64d,stroke:#cc7a30,color:white
+    style LayeredArch fill:#d94dbb,stroke:#a3378a,color:white
+```
+
 ## 🏗️ SUBSYSTEM-BASED WORKSPACE ARCHITECTURE
 
 ```mermaid

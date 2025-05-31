@@ -169,3 +169,13 @@ async pub fn say_hello(
 6. TypedBuilder 用法遵循:并对每个字段根据情况引入 default, default_code, 以及 setter(strip_option), setter(into), 或者 setter(strip_option, into)。比如 Option<String> 要使用 `#[builder(default, setter(strip_option, into)]`. 不要滥用 default。
 
 请仔细审核 @/rust rule set，看各部分内容是否有重复，是否正交，请相应修改和重构，另外，如果还有 best practice 和 rust 最佳实践和设计模式没有写进去，请添加。
+
+请再次仔细审视 @/rust rules set，请确保：
+
+1. rust best practices 已涵盖
+2. rust rules 是正交的，且通过 @main.mdc 可以根据不同的场景动态加载不同的 rules。
+3. 目前的子目录设置是合理的
+4. 核心规则 @/core  是合理的，且利于产生高质量且简洁的代码
+5. @/features 规则是合理的，且利于产生高质量且简洁的代码
+6. 这些 rules 无论对新项目还是老项目都能够产生高质量且简洁的代码
+如果你发现需要任何修改，请在 ./spec/ 下生成一个详细的修改计划

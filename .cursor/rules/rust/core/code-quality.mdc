@@ -7,6 +7,66 @@ alwaysApply: false
 
 > **TL;DR:** Essential code quality rules for all Rust projects, focusing on maintainable, production-ready code that follows modern Rust 2024 idioms.
 
+## 🔍 CODE QUALITY STRATEGY SELECTION
+
+```mermaid
+graph TD
+    Start["Code Quality Requirements"] --> ProjectType{"Project Type?"}
+
+    ProjectType -->|"Simple Library"| SimpleLib["Simple Library Rules"]
+    ProjectType -->|"Complex Application"| ComplexApp["Complex Application Rules"]
+    ProjectType -->|"CLI Tool"| CLITool["CLI Tool Rules"]
+    ProjectType -->|"Web Service"| WebService["Web Service Rules"]
+
+    SimpleLib --> BasicRules["Basic Quality Rules"]
+    ComplexApp --> AdvancedRules["Advanced Quality Rules"]
+    CLITool --> BasicRules
+    WebService --> AdvancedRules
+
+    BasicRules --> Naming["Naming Strategy"]
+    AdvancedRules --> Naming
+
+    Naming --> NamingRules["• Functionality-based files<br>• Descriptive specific names<br>• No implementation suffixes"]
+
+    NamingRules --> Structure["Code Structure"]
+
+    Structure --> StructureRules["• File-based organization<br>• Size limitations (500 lines)<br>• Single responsibility<br>• Function size (150 lines)"]
+
+    StructureRules --> Safety["Safety Requirements"]
+
+    Safety --> SafetyRules["• Rust 2024 edition<br>• No unsafe code<br>• No unwrap() in production<br>• Proper error handling"]
+
+    SafetyRules --> Testing["Testing Strategy"]
+
+    Testing --> TestingRules["• Unit tests same file<br>• Integration tests separate<br>• Doc tests with examples"]
+
+    TestingRules --> Verification["Quality Verification"]
+
+    Verification --> Build["cargo build"]
+    Verification --> Test["cargo test"]
+    Verification --> Clippy["cargo clippy"]
+
+    Build --> AllPass{"All Pass?"}
+    Test --> AllPass
+    Clippy --> AllPass
+
+    AllPass -->|"Yes"| Success["✅ Quality Standards Met"]
+    AllPass -->|"No"| FixIssues["🔧 Fix Issues"]
+
+    FixIssues --> Verification
+
+    style Start fill:#4da6ff,stroke:#0066cc,color:white
+    style ProjectType fill:#ffa64d,stroke:#cc7a30,color:white
+    style SimpleLib fill:#4dbb5f,stroke:#36873f,color:white
+    style ComplexApp fill:#d94dbb,stroke:#a3378a,color:white
+    style CLITool fill:#9f4dbb,stroke:#7a3787,color:white
+    style WebService fill:#bb4d4d,stroke:#873636,color:white
+    style BasicRules fill:#bbbb4d,stroke:#878736,color:white
+    style AdvancedRules fill:#4dbbbb,stroke:#368787,color:white
+    style Success fill:#5fbb5f,stroke:#4a8f4a,color:white
+    style FixIssues fill:#ff6b6b,stroke:#cc5555,color:white
+```
+
 ## 🎯 FUNDAMENTAL PRINCIPLES
 
 ### Code Organization
