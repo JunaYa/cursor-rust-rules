@@ -1,0 +1,243 @@
+---
+description:
+globs: Cargo.toml,*.rs
+alwaysApply: false
+---
+# 🦀 RUST PROJECT RULE SET SYSTEM
+
+> **TL;DR:** This system provides comprehensive guidelines for Rust project development with complexity-based rule loading, following industry best practices for scalable, maintainable Rust code.
+
+## 🔍 PROJECT COMPLEXITY DETERMINATION
+
+```mermaid
+graph TD
+    Start["New Rust Project"] --> Analyze["Analyze Project Requirements"]
+    Analyze --> Q1{"Multiple distinct<br>functional domains?"}
+    Q1 -->|Yes| Q2{"Expected LOC<br>> 10,000?"}
+    Q1 -->|No| Q3{"Single domain with<br>multiple components?"}
+
+    Q2 -->|Yes| Complex["COMPLEX PROJECT<br>Multi-crate workspace"]
+    Q2 -->|No| Q4{"Shared libraries<br>needed?"}
+    Q4 -->|Yes| Complex
+    Q4 -->|No| Simple["SIMPLE PROJECT<br>Single crate"]
+
+    Q3 -->|Yes| Q5{"Need separate<br>deployable units?"}
+    Q3 -->|No| Simple
+    Q5 -->|Yes| Complex
+    Q5 -->|No| Simple
+
+    Complex --> LoadComplex["Load Complex Rules"]
+    Simple --> LoadSimple["Load Simple Rules"]
+
+    LoadComplex --> Features["Load Feature-Specific Rules"]
+    LoadSimple --> Features
+
+    Features --> Web{"Web Framework<br>needed?"}
+    Features --> DB{"Database<br>access needed?"}
+    Features --> Concurrent{"Heavy<br>concurrency?"}
+
+    Web -->|Yes| WebRules["Load Axum Rules"]
+    DB -->|Yes| DBRules["Load SQLx Rules"]
+    Concurrent -->|Yes| ConcurrencyRules["Load Concurrency Rules"]
+
+    style Start fill:#4da6ff,stroke:#0066cc,color:white
+    style Complex fill:#d94dbb,stroke:#a3378a,color:white
+    style Simple fill:#4dbb5f,stroke:#36873f,color:white
+    style LoadComplex fill:#ffa64d,stroke:#cc7a30,color:white
+    style LoadSimple fill:#4dbbbb,stroke:#368787,color:white
+```
+
+## 📊 COMPLEXITY INDICATORS
+
+### Simple Project Indicators
+- **Single Domain**: One clear functional area (CLI tool, library, simple service)
+- **Codebase Size**: Expected < 10,000 lines of code
+- **Team Size**: 1-3 developers
+- **Dependencies**: Minimal external integrations
+- **Deployment**: Single binary or library
+
+### Complex Project Indicators
+- **Multiple Domains**: Authentication, business logic, data processing, etc.
+- **Codebase Size**: Expected > 10,000 lines of code
+- **Team Size**: 4+ developers or multiple teams
+- **Shared Components**: Common libraries across multiple binaries
+- **Microservices**: Multiple deployable units
+
+## 🔄 RULE LOADING HIERARCHY
+
+```mermaid
+graph TD
+    Main["main.mdc"] --> Core["Core Rules<br>(Always Loaded)"]
+    Main --> Complexity{"Project<br>Complexity?"}
+
+    Core --> Quality["Code Quality Rules"]
+    Core --> Testing["Testing Standards"]
+    Core --> ErrorHandling["Error Handling"]
+
+    Complexity -->|Simple| SimpleRules["Simple Project Rules"]
+    Complexity -->|Complex| ComplexRules["Complex Project Rules"]
+
+    SimpleRules --> SingleCrate["Single Crate Structure"]
+    ComplexRules --> Workspace["Workspace Management"]
+    ComplexRules --> MultiCrate["Multi-crate Architecture"]
+
+    SimpleRules & ComplexRules --> FeatureDetection["Feature Detection"]
+
+    FeatureDetection --> WebFeature{"Web Framework?"}
+    FeatureDetection --> DBFeature{"Database?"}
+    FeatureDetection --> SerdeFeature{"Serialization?"}
+    FeatureDetection --> BuilderFeature{"Complex Types?"}
+
+    WebFeature -->|Yes| AxumRules["Axum Framework Rules"]
+    DBFeature -->|Yes| SQLxRules["SQLx Database Rules"]
+    SerdeFeature -->|Yes| SerdeRules["Serde Best Practices"]
+    BuilderFeature -->|Yes| TypedBuilderRules["TypedBuilder Rules"]
+
+    style Main fill:#4da6ff,stroke:#0066cc,color:white
+    style Core fill:#ffa64d,stroke:#cc7a30,color:white
+    style SimpleRules fill:#4dbb5f,stroke:#36873f,color:white
+    style ComplexRules fill:#d94dbb,stroke:#a3378a,color:white
+```
+
+## 📋 CORE PRINCIPLES (ALWAYS APPLIED)
+
+1. **Code Quality**: Follow DRY/SRP principles, function size limits
+2. **File Organization**: Functionality-based structure, not type-based
+3. **Error Handling**: Consistent error handling patterns
+4. **Testing**: Comprehensive unit test coverage
+5. **Documentation**: Clear, maintainable code documentation
+
+## 🚀 PROJECT INITIALIZATION WORKFLOW
+
+```mermaid
+sequenceDiagram
+    participant Dev as Developer
+    participant System as Rule System
+    participant Cargo as Cargo
+    participant Files as File Structure
+
+    Dev->>System: Initialize Rust project
+    System->>System: Determine complexity
+    System->>Dev: Complexity assessment result
+
+    alt Simple Project
+        System->>Cargo: cargo new project_name
+        System->>Files: Create single crate structure
+    else Complex Project
+        System->>Cargo: cargo new --name workspace project_name
+        System->>Files: Create workspace structure
+        System->>Files: Initialize member crates
+    end
+
+    System->>System: Detect required features
+    System->>Files: Apply feature-specific templates
+    System->>Dev: Project ready for development
+```
+
+## 📝 FEATURE DETECTION CHECKLIST
+
+```markdown
+## Feature Detection for Rule Loading
+
+### Web Framework Requirements
+- [ ] HTTP server needed
+- [ ] REST API endpoints
+- [ ] OpenAPI documentation required
+- [ ] → Load Axum rules if YES to any
+
+### Database Requirements
+- [ ] Database queries needed
+- [ ] SQL database integration
+- [ ] Database migrations
+- [ ] → Load SQLx rules if YES to any
+
+### Serialization Requirements
+- [ ] JSON handling required
+- [ ] External API integration
+- [ ] Configuration files
+- [ ] → Load Serde rules if YES to any
+
+### Builder Pattern Requirements
+- [ ] Complex data structures (4+ fields)
+- [ ] Optional fields in constructors
+- [ ] Fluent API needed
+- [ ] → Load TypedBuilder rules if YES to any
+
+### Concurrency Requirements
+- [ ] Multi-threading needed
+- [ ] Shared state across threads
+- [ ] High-performance requirements
+- [ ] → Load Concurrency rules if YES to any
+```
+
+## 🔧 RULE LOADING COMMANDS
+
+Based on project analysis, load specific rule sets:
+
+```bash
+# For simple projects
+# Loads: core + simple + detected features
+
+# For complex projects
+# Loads: core + complex + workspace + detected features
+
+# Feature-specific loading examples:
+# Web: core + axum + serde + typed-builder
+# Database: core + sqlx + error-handling
+# CLI: core + simple + clap + error-handling
+```
+
+## 📚 AVAILABLE RULE MODULES
+
+| Module | File | Description |
+|--------|------|-------------|
+| **Core** | `core/code-quality.mdc` | DRY/SRP, function size limits |
+| **Simple** | `simple/single-crate.mdc` | Single crate project structure |
+| **Complex** | `complex/workspace.mdc` | Multi-crate workspace management |
+| **Web** | `features/axum.mdc` | Axum framework best practices |
+| **Database** | `features/sqlx.mdc` | SQLx patterns and testing |
+| **Serialization** | `features/serde.mdc` | Serde configuration and patterns |
+| **Builders** | `features/typed-builder.mdc` | TypedBuilder usage patterns |
+| **Concurrency** | `features/concurrency.mdc` | Rust concurrency best practices |
+| **Testing** | `quality/testing.mdc` | Unit testing standards |
+| **Errors** | `quality/error-handling.mdc` | Error handling patterns |
+
+## 🎯 PROJECT TYPE EXAMPLES
+
+### Simple Project Examples
+- CLI utilities (grep clone, file converter)
+- Single-purpose libraries (parsing, algorithms)
+- Simple HTTP servers (< 10 endpoints)
+- Desktop applications (single-window apps)
+
+### Complex Project Examples
+- Multi-service applications (auth + business + gateway)
+- Enterprise applications (multiple domains)
+- Large web applications (> 20 endpoints)
+- Database systems with multiple engines
+- Distributed systems
+
+## ⚡ OPTIMIZATION FEATURES
+
+- **Lazy Loading**: Feature-specific rules loaded only when needed
+- **Context Preservation**: Project decisions cached across sessions
+- **Template Generation**: Auto-generate boilerplate based on detected patterns
+- **Incremental Updates**: Update only changed components
+
+## 🚨 MANDATORY VERIFICATION
+
+Before starting any Rust development:
+
+```markdown
+✓ RUST PROJECT VERIFICATION
+- Project complexity determined? [SIMPLE/COMPLEX]
+- Required features detected? [List]
+- Appropriate rules loaded? [YES/NO]
+- Cargo.toml structure verified? [YES/NO]
+- Error handling strategy selected? [thiserror/anyhow]
+
+→ If all verified: Proceed with development
+→ If missing: Complete project setup
+```
+
+This system ensures optimal Rust development practices while maintaining flexibility for different project scales and requirements.
